@@ -6,6 +6,7 @@ import { executePrompt, resumeApproval, type ApprovalInput } from "./agent.js";
 import { CliAgentRunStore } from "./agent-run-store.js";
 import { createLogger } from "./logging/logger.js";
 import { SessionStore } from "./session-store.js";
+import { resolveModelId } from "./model-catalog.js";
 import { ChatApp } from "./ui/components/ChatApp.js";
 import type { ApprovalSubmit, PromptResult, SubmitPrompt, TextUpdate, ToolUpdate } from "./ui/types.js";
 
@@ -18,6 +19,7 @@ try {
 const workspace = path.resolve(process.cwd(), "../agentdock");
 const store = new SessionStore(path.resolve(process.cwd(), "sessions"));
 const logger = createLogger().child({ module: "main" });
+let modelId = resolveModelId(process.env.OPENROUTER_MODEL);
 
 async function runCli(): Promise<void> {
   logger.info({ workspace }, "agentdock-cli starting");
@@ -51,6 +53,7 @@ async function runCli(): Promise<void> {
 
     const runStore = new CliAgentRunStore(store, session.id);
     const { result } = await executePrompt(session, prompt, {
+      modelId,
       mode: session.mode,
       runStore,
       onToolCall: (tool) => onToolUpdate({ name: tool.name, state: "running" }),
@@ -73,6 +76,7 @@ async function runCli(): Promise<void> {
       reason: approved ? "Approved in AgentDock CLI" : "Denied in AgentDock CLI",
     };
     const { result } = await resumeApproval(session, approval, {
+      modelId,
       mode: session.mode,
       runStore,
       onToolCall: (tool) => onToolUpdate({ name: tool.name, state: "running" }),
@@ -89,7 +93,10 @@ async function runCli(): Promise<void> {
   const instance = render(
     <ChatApp
       workspace={workspace}
-      model="openrouter/default"
+      model={modelId}
+      onChangeModel={(nextModel) => {
+        modelId = nextModel;
+      }}
       mode={session.mode}
       onToggleMode={async (mode) => {
         session.mode = mode;

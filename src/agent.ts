@@ -1,6 +1,7 @@
 import {
   resumeStreamAgent,
   streamAgent,
+  createOpenRouterModel,
   type AgentContext,
   type AgentHooks,
   type AgentRunResult,
@@ -13,8 +14,8 @@ import type { CliSession } from "./session-types.js";
 import type { TextUpdate, ToolUpdate } from "./ui/types.js";
 
 export interface PromptOptions {
+  modelId: string;
   mode: CliSession["mode"];
-  modelId?: string;
   logger: AppLogger;
   runStore: AgentRunStore;
   onToolCall?: (tool: { name: string; input: unknown }) => void;
@@ -66,11 +67,11 @@ async function executeStream(
   };
   const agentOptions: RunAgentOptions = {
     messages: session.messages,
+    model: createOpenRouterModel({ modelId: options.modelId }),
     registry: createToolRegistryFor({
       workspaceRoot: session.workspaceRoot,
     }),
     hooks,
-    modelId: options.modelId,
     permissionMode: options.mode,
     runStore: options.runStore,
     ...(options.mode === "normal"

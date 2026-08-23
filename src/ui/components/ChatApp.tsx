@@ -11,6 +11,7 @@ import { Spinner } from "./Spinner.js";
 interface ChatAppProps {
   workspace: string;
   model: string;
+  onChangeModel: (model: string) => void | Promise<void>;
   mode: "normal" | "approve_all";
   onToggleMode: (mode: "normal" | "approve_all") => void | Promise<void>;
   onSubmit: SubmitPrompt;
@@ -20,6 +21,7 @@ interface ChatAppProps {
 export function ChatApp({
   workspace,
   model,
+  onChangeModel,
   mode,
   onToggleMode,
   onSubmit,
@@ -31,10 +33,20 @@ export function ChatApp({
   const [busy, setBusy] = useState(false);
   const [pendingApproval, setPendingApproval] = useState<ToolApprovalRequest | null>(null);
   const [activeMode, setActiveMode] = useState(mode);
+  const [activeModel, setActiveModel] = useState(model);
 
   useEffect(() => {
     setActiveMode(mode);
   }, [mode]);
+
+  useEffect(() => {
+    setActiveModel(model);
+  }, [model]);
+
+  const selectModel = useCallback((nextModel: string) => {
+    setActiveModel(nextModel);
+    void onChangeModel(nextModel);
+  }, [onChangeModel]);
 
   useInput((_, key) => {
     if (key.tab && key.shift && !busy && !pendingApproval) {
@@ -139,14 +151,19 @@ export function ChatApp({
 
   return (
     <>
-      <AgentHeader workspace={workspace} model={model} mode={activeMode} />
+      <AgentHeader workspace={workspace} model={activeModel} mode={activeMode} />
       <Box flexDirection="column">
         {messages.map((message) => <Message key={message.id} message={message} />)}
       </Box>
       {pendingApproval && !busy && <ApprovalPrompt request={pendingApproval} onDecision={decideApproval} />}
       <Box flexDirection="column" marginTop={1}>
         {busy && <Spinner busy={busy} toolActivity={toolActivity} />}
-        <ChatInput disabled={busy || Boolean(pendingApproval)} onSubmit={submit} />
+        <ChatInput
+          disabled={busy || Boolean(pendingApproval)}
+          selectedModel={activeModel}
+          onSelectModel={selectModel}
+          onSubmit={submit}
+        />
         <Box paddingX={2}>
           <TextMode mode={activeMode} />
         </Box>

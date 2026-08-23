@@ -18,7 +18,7 @@ AgentDock CLI provides a local interactive environment for testing agents, tools
 - **Interactive Agent Sessions:** Run prompts continuously in a local REPL.
 - **Session Persistence:** Save, inspect, resume, and reload previous sessions.
 - **Workspace Tools:** Read, search, list, write, and update files inside a workspace.
-- **Controlled Writes:** Keep file writes disabled by default and enable them explicitly.
+- **Workspace File Tools:** Execute approved file operations inside the workspace.
 - **TypeScript First:** Fully typed and built for Node.js applications.
 
 ## 🚀 Setup
@@ -34,6 +34,8 @@ Create a `.env` file in this directory:
 
 ```env
 OPENROUTER_API_KEY=your-key
+# Optional: overrides the CLI's explicit catalog default.
+OPENROUTER_MODEL=your-model-id
 ```
 
 The CLI loads this file automatically. Do not commit it.
@@ -63,7 +65,7 @@ yarn start
 
 The CLI defaults to `../agentdock` as its workspace. Use `--workspace <path>` to test another project.
 
-Once running, enter prompts continuously. Use `/help` for interactive commands.
+Once running, enter prompts continuously. Use `/help` for interactive commands. Use `/model` or `/models` to browse and select a model; the selected model is shown in the header.
 
 Sessions are stored under `sessions/` and are ignored by git.
 
