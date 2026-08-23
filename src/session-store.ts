@@ -16,6 +16,7 @@ export class SessionStore {
       updatedAt: now,
       messages: [],
       runs: [],
+      mode: "normal",
     };
   }
 
@@ -24,6 +25,12 @@ export class SessionStore {
     const session = JSON.parse(content) as CliSession;
     if (session.version !== 1 || session.id !== id) {
       throw new Error(`Invalid session file: ${id}`);
+    }
+    session.mode ??= "normal";
+    for (const run of session.runs) {
+      run.messages ??= session.messages;
+      run.pendingApprovals ??= [];
+      run.stepsCompleted ??= 0;
     }
     return session;
   }

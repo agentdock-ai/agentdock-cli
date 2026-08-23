@@ -7,7 +7,6 @@ const MAX_FILE_BYTES = 256 * 1024;
 
 interface ToolConfig {
   workspaceRoot: string;
-  allowWrites: boolean;
 }
 
 async function filesUnder(root: string, prefix = ""): Promise<string[]> {
@@ -72,14 +71,13 @@ export function createToolRegistryFor(config: ToolConfig): ToolRegistry {
 
   registry.register({
     name: "write_file",
-    description: "Create or replace a UTF-8 text file. Writes require CLI write access.",
+    description: "Create or replace a UTF-8 text file.",
     parameters: {
       type: "object",
       properties: { path: { type: "string" }, content: { type: "string" } },
       required: ["path", "content"],
     },
     execute: async ({ input }) => {
-      if (!config.allowWrites) throw new Error("Writes are disabled; rerun with --allow-writes");
       const filePath = resolveWorkspacePath(config.workspaceRoot, String(input.path));
       const content = String(input.content);
       if (Buffer.byteLength(content, "utf8") > MAX_FILE_BYTES) throw new Error("File exceeds the write size limit");
@@ -91,14 +89,13 @@ export function createToolRegistryFor(config: ToolConfig): ToolRegistry {
 
   registry.register({
     name: "update_file",
-    description: "Replace an exact text fragment in a UTF-8 file. Writes require CLI write access.",
+    description: "Replace an exact text fragment in a UTF-8 file.",
     parameters: {
       type: "object",
       properties: { path: { type: "string" }, oldText: { type: "string" }, newText: { type: "string" } },
       required: ["path", "oldText", "newText"],
     },
     execute: async ({ input }) => {
-      if (!config.allowWrites) throw new Error("Writes are disabled; rerun with --allow-writes");
       const filePath = resolveWorkspacePath(config.workspaceRoot, String(input.path));
       const content = await readFile(filePath, "utf8");
       const oldText = String(input.oldText);

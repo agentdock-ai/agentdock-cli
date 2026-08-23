@@ -1,5 +1,6 @@
 import type {
   Message,
+  ToolApprovalRequest,
   ToolCallRecord,
   ToolErrorRecord,
   ToolResultRecord,
@@ -10,7 +11,10 @@ export interface CliRun {
   prompt: string;
   startedAt: string;
   completedAt?: string;
-  status: "running" | "completed" | "failed" | "aborted";
+  status: "running" | "waiting_for_approval" | "completed" | "failed" | "cancelled";
+  messages: Message[];
+  pendingApprovals: ToolApprovalRequest[];
+  stepsCompleted: number;
   content?: string;
   toolCalls: ToolCallRecord[];
   toolResults: ToolResultRecord[];
@@ -26,4 +30,5 @@ export interface CliSession {
   updatedAt: string;
   messages: Message[];
   runs: CliRun[];
+  mode: "normal" | "approve_all";
 }

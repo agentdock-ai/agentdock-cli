@@ -1,4 +1,5 @@
 export * from "./components/AgentHeader.js";
+export * from "./components/ApprovalPrompt.js";
 export * from "./components/ChatApp.js";
 export * from "./components/ChatInput.js";
 export * from "./components/Message.js";

@@ -1,3 +1,5 @@
+import type { ToolApprovalRequest } from "agentdock";
+
 export type ToolState = "running" | "complete" | "error";
 
 export interface ToolActivity {
@@ -14,8 +16,22 @@ export interface ChatMessage {
 export type ToolUpdate = (activity: ToolActivity) => void;
 export type TextUpdate = (text: string) => void;
 
+export interface PromptResult {
+  content: string;
+  runId: string;
+  status: "completed" | "waiting_for_approval" | "failed" | "cancelled";
+  approvalRequests: ToolApprovalRequest[];
+}
+
 export type SubmitPrompt = (
   prompt: string,
   onToolUpdate: ToolUpdate,
   onText: TextUpdate,
-) => Promise<string | null>;
+) => Promise<PromptResult | null>;
+
+export type ApprovalSubmit = (
+  request: ToolApprovalRequest,
+  approved: boolean,
+  onToolUpdate: ToolUpdate,
+  onText: TextUpdate,
+) => Promise<PromptResult>;
