@@ -1,11 +1,11 @@
 import React, { useCallback, useEffect, useState } from "react";
 import { Box, Text, useApp, useInput } from "ink";
-import type { ToolApprovalRequest } from "agentdock";
+import { AgentEventType, type AgentEvent, type ToolApprovalDecision, type ToolApprovalRequest } from "agentdock";
 import { AgentHeader } from "./AgentHeader.js";
 import { ApprovalPrompt } from "./ApprovalPrompt.js";
 import { ChatInput } from "./ChatInput.js";
 import { Message } from "./Message.js";
-import type { ApprovalSubmit, ChatMessage, PromptResult, SubmitPrompt, ToolActivity } from "../types.js";
+import type { AgentRunControl, ApprovalSubmit, ChatMessage, PromptResult, SubmitPrompt, ToolActivity, ToolCallState } from "../types.js";
 import { Spinner } from "./Spinner.js";
 
 interface ChatAppProps {
@@ -31,9 +31,13 @@ export function ChatApp({
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [toolActivity, setToolActivity] = useState<ToolActivity[]>([]);
   const [busy, setBusy] = useState(false);
-  const [pendingApproval, setPendingApproval] = useState<ToolApprovalRequest | null>(null);
+  const [pendingApprovals, setPendingApprovals] = useState<ToolApprovalRequest[]>([]);
+  const [approvalDecisions, setApprovalDecisions] = useState<ToolApprovalDecision[]>([]);
   const [activeMode, setActiveMode] = useState(mode);
   const [activeModel, setActiveModel] = useState(model);
+  const [runControl, setRunControl] = useState<AgentRunControl | null>(null);
+  const [stopRequested, setStopRequested] = useState(false);
+  const pendingApproval = pendingApprovals[0] ?? null;
 
   useEffect(() => {
     setActiveMode(mode);
@@ -49,6 +53,13 @@ export function ChatApp({
   }, [onChangeModel]);
 
   useInput((_, key) => {
+    if (key.escape && busy && runControl && !stopRequested) {
+      setStopRequested(true);
+      void runControl.stop().catch(() => {
+        setStopRequested(false);
+      });
+      return;
+    }
     if (key.tab && key.shift && !busy && !pendingApproval) {
       const nextMode = activeMode === "normal" ? "approve_all" : "normal";
       setActiveMode(nextMode);
@@ -69,8 +80,90 @@ export function ChatApp({
       setMessages((current) => current.filter((message) => message.id !== assistantId));
     }
 
-    setPendingApproval(response?.approvalRequests[0] ?? null);
+    setPendingApprovals(response?.approvalRequests ?? []);
+    setApprovalDecisions([]);
   }, [updateAssistant]);
+
+  const handleAgentEvent = useCallback((
+    event: AgentEvent,
+    assistantId: string,
+    appendText: (text: string) => void,
+  ): void => {
+    if (event.type === AgentEventType.TextDelta) {
+      appendText(event.text);
+      return;
+    }
+
+    if (event.type === AgentEventType.ToolCalled) {
+      setMessages((current) => upsertToolMessage(current, assistantId, {
+        toolCallId: event.toolCall.toolCallId,
+        toolName: event.toolCall.name,
+        toolInput: event.toolCall.input,
+        toolState: "running",
+      }));
+      setToolActivity((current) => [
+        ...current.filter((item) => item.name !== event.toolCall.name),
+        { name: event.toolCall.name, state: "running" },
+      ]);
+      return;
+    }
+
+    if (event.type === AgentEventType.ToolResult) {
+      setMessages((current) => upsertToolMessage(current, assistantId, {
+        toolCallId: event.result.toolCallId,
+        toolName: event.result.name,
+        toolInput: event.result.input,
+        toolState: "complete",
+        toolOutput: event.result.output,
+      }));
+      setToolActivity((current) => [
+        ...current.filter((item) => item.name !== event.result.name),
+        { name: event.result.name, state: "complete" },
+      ]);
+      return;
+    }
+
+    if (event.type === AgentEventType.ToolError || event.type === AgentEventType.ToolOutputDenied) {
+      setMessages((current) => upsertToolMessage(current, assistantId, {
+        toolCallId: event.toolCall.toolCallId,
+        toolName: event.toolCall.name,
+        toolInput: event.toolCall.input,
+        toolState: "error",
+        toolError: event.type === AgentEventType.ToolError ? event.error.message : "Tool output denied",
+      }));
+      setToolActivity((current) => [
+        ...current.filter((item) => item.name !== event.toolCall.name),
+        { name: event.toolCall.name, state: "error" },
+      ]);
+      return;
+    }
+
+    if (event.type === AgentEventType.ApprovalRequired) {
+      setMessages((current) => event.approvals.reduce(
+        (messages, approval) => upsertToolMessage(messages, assistantId, {
+          toolCallId: approval.toolCall.toolCallId,
+          toolName: approval.toolCall.name,
+          toolInput: approval.toolCall.input,
+          toolState: "approval_required",
+        }),
+        current,
+      ));
+      setPendingApprovals((current) => mergeApprovalRequests(current, event.approvals));
+      return;
+    }
+
+    if (event.type === AgentEventType.ApprovalResolved) {
+      setMessages((current) => event.approvals.reduce(
+        (messages, approval) => upsertToolMessage(messages, assistantId, {
+          toolCallId: approval.toolCall.toolCallId,
+          toolName: approval.toolCall.name,
+          toolInput: approval.toolCall.input,
+          toolState: "running",
+        }),
+        current,
+      ));
+    }
+  }, []);
 
   const submit = useCallback(async (prompt: string) => {
     if (busy || pendingApproval) return;
@@ -87,6 +180,8 @@ export function ChatApp({
 
     const assistantId = crypto.randomUUID();
     setMessages((current) => [...current, { id: assistantId, role: "assistant", content: "" }]);
+    setRunControl(null);
+    setStopRequested(false);
     setBusy(true);
     setToolActivity([]);
     let streamedContent = "";
@@ -94,14 +189,11 @@ export function ChatApp({
     try {
       const response = await onSubmit(
         prompt,
-        (activity) => setToolActivity((current) => [
-          ...current.filter((item) => item.name !== activity.name),
-          activity,
-        ]),
-        (text) => {
+        (event) => handleAgentEvent(event, assistantId, (text) => {
           streamedContent += text;
           updateAssistant(assistantId, streamedContent);
-        },
+        }),
+        setRunControl,
       );
       applyResult(assistantId, streamedContent, response);
     } catch (error) {
@@ -109,10 +201,12 @@ export function ChatApp({
         ? { ...message, role: "system", content: error instanceof Error ? error.message : String(error) }
         : message));
     } finally {
+      setRunControl(null);
+      setStopRequested(false);
       setBusy(false);
       setToolActivity([]);
     }
-  }, [applyResult, busy, exit, onSubmit, pendingApproval, updateAssistant]);
+  }, [applyResult, busy, exit, handleAgentEvent, onSubmit, pendingApproval, updateAssistant]);
 
   const decideApproval = useCallback(async (approved: boolean) => {
     if (!pendingApproval || busy) return;
@@ -120,7 +214,18 @@ export function ChatApp({
     const assistantId = [...messages].reverse().find((message) => message.role === "assistant")?.id;
     if (!assistantId) return;
 
-    setPendingApproval(null);
+    const decisions = [...approvalDecisions, { approvalId: request.approvalId, approved }];
+    const remainingApprovals = pendingApprovals.slice(1);
+    if (remainingApprovals.length > 0) {
+      setPendingApprovals(remainingApprovals);
+      setApprovalDecisions(decisions);
+      return;
+    }
+
+    setPendingApprovals([]);
+    setApprovalDecisions([]);
+    setRunControl(null);
+    setStopRequested(false);
     setBusy(true);
     setToolActivity([]);
     let streamedContent = "";
@@ -128,15 +233,12 @@ export function ChatApp({
     try {
       const response = await onApproval(
         request,
-        approved,
-        (activity) => setToolActivity((current) => [
-          ...current.filter((item) => item.name !== activity.name),
-          activity,
-        ]),
-        (text) => {
+        decisions,
+        (event) => handleAgentEvent(event, assistantId, (text) => {
           streamedContent += text;
           updateAssistant(assistantId, streamedContent);
-        },
+        }),
+        setRunControl,
       );
       applyResult(assistantId, streamedContent, response);
     } catch (error) {
@@ -144,10 +246,12 @@ export function ChatApp({
         ? { ...message, role: "system", content: error instanceof Error ? error.message : String(error) }
         : message));
     } finally {
+      setRunControl(null);
+      setStopRequested(false);
       setBusy(false);
       setToolActivity([]);
     }
-  }, [applyResult, busy, messages, onApproval, pendingApproval, updateAssistant]);
+  }, [approvalDecisions, applyResult, busy, handleAgentEvent, messages, onApproval, pendingApproval, pendingApprovals, updateAssistant]);
 
   return (
     <>
@@ -178,4 +282,41 @@ function TextMode({ mode }: { mode: "normal" | "approve_all" }): React.ReactElem
       Mode: {mode === "approve_all" ? "Approve All" : "Normal"} · Shift+Tab to switch
     </Text>
   );
+}
+
+function mergeApprovalRequests(
+  current: readonly ToolApprovalRequest[],
+  incoming: readonly ToolApprovalRequest[],
+): ToolApprovalRequest[] {
+  const requests = new Map(current.map((request) => [request.approvalId, request]));
+  for (const request of incoming) requests.set(request.approvalId, request);
+  return Array.from(requests.values());
+}
+
+function upsertToolMessage(
+  current: readonly ChatMessage[],
+  assistantId: string,
+  tool: {
+    toolCallId: string;
+    toolName: string;
+    toolInput: unknown;
+    toolState: ToolCallState;
+    toolOutput?: unknown;
+    toolError?: string;
+  },
+): ChatMessage[] {
+  const existingIndex = current.findIndex((message) => message.toolCallId === tool.toolCallId);
+  if (existingIndex >= 0) {
+    return current.map((message, index) => index === existingIndex ? { ...message, ...tool } : message);
+  }
+
+  const message: ChatMessage = {
+    id: `tool-${tool.toolCallId}`,
+    role: "system",
+    content: "",
+    ...tool,
+  };
+  const assistantIndex = current.findIndex((candidate) => candidate.id === assistantId);
+  if (assistantIndex < 0) return [...current, message];
+  return [...current.slice(0, assistantIndex), message, ...current.slice(assistantIndex)];
 }

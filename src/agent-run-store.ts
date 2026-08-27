@@ -1,4 +1,10 @@
-import type { AgentRunRecord, AgentRunStore } from "agentdock";
+import type {
+  AgentRunApprovalClaim,
+  AgentRunRecord,
+  AgentRunStore,
+  AgentRunStatus,
+  ToolApprovalDecision,
+} from "agentdock";
 import type { SessionStore } from "./session-store.js";
 import type { CliRun } from "./session-types.js";
 
@@ -31,13 +37,65 @@ export class CliAgentRunStore implements AgentRunStore {
     session.runs[index] = fromAgentRun({ ...current, ...update, runId });
     await this.sessions.save(session);
   }
+
+  async transition(
+    runId: string,
+    expectedStatus: AgentRunStatus | AgentRunStatus[],
+    update: Partial<AgentRunRecord>,
+  ): Promise<boolean> {
+    const session = await this.sessions.load(this.sessionId);
+    const index = session.runs.findIndex((run) => run.id === runId);
+    if (index < 0) return false;
+
+    const expected = Array.isArray(expectedStatus) ? expectedStatus : [expectedStatus];
+    const run = session.runs[index];
+    if (!expected.includes(run.status)) return false;
+
+    const current = toAgentRun(run, session);
+    session.runs[index] = fromAgentRun({ ...current, ...update, runId });
+    await this.sessions.save(session);
+    return true;
+  }
+
+  async claimApprovals(
+    runId: string,
+    decisions: ToolApprovalDecision[],
+  ): Promise<AgentRunApprovalClaim | null> {
+    const session = await this.sessions.load(this.sessionId);
+    const index = session.runs.findIndex((run) => run.id === runId);
+    if (index < 0) return null;
+
+    const run = session.runs[index];
+    const pendingApprovals = run.pendingApprovals ?? [];
+    if (
+      run.status !== "waiting_for_approval"
+      || pendingApprovals.length === 0
+      || pendingApprovals.length !== decisions.length
+    ) {
+      return null;
+    }
+
+    const decisionIds = new Set(decisions.map((decision) => decision.approvalId));
+    if (decisionIds.size !== decisions.length || !pendingApprovals.every((approval) => decisionIds.has(approval.approvalId))) {
+      return null;
+    }
+
+    const approvals = structuredClone(pendingApprovals);
+    run.status = "running";
+    run.pendingApprovals = [];
+    run.completedAt = undefined;
+    await this.sessions.save(session);
+
+    return {
+      record: toAgentRun(run, session),
+      approvals,
+    };
+  }
 }
 
-function toAgentRun(run: CliRun, session: { workspaceRoot: string; messages: AgentRunRecord["messages"] }): AgentRunRecord {
+function toAgentRun(run: CliRun, session: { messages: AgentRunRecord["messages"] }): AgentRunRecord {
   return {
     runId: run.id,
-    userId: "cli-user",
-    organizationId: "cli-organization",
     status: run.status,
     messages: run.messages ?? session.messages,
     pendingApprovals: run.pendingApprovals ?? [],

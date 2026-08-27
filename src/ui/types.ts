@@ -1,6 +1,7 @@
-import type { ToolApprovalRequest } from "agentdock";
+import type { AgentEvent, ToolApprovalDecision, ToolApprovalRequest } from "agentdock";
 
 export type ToolState = "running" | "complete" | "error";
+export type ToolCallState = ToolState | "approval_required";
 
 export interface ToolActivity {
   name: string;
@@ -11,10 +12,22 @@ export interface ChatMessage {
   id: string;
   role: "user" | "assistant" | "system";
   content: string;
+  toolCallId?: string;
+  toolName?: string;
+  toolInput?: unknown;
+  toolState?: ToolCallState;
+  toolOutput?: unknown;
+  toolError?: string;
 }
 
-export type ToolUpdate = (activity: ToolActivity) => void;
-export type TextUpdate = (text: string) => void;
+export type AgentEventUpdate = (event: AgentEvent) => void;
+
+export interface AgentRunControl {
+  runId: string;
+  stop: () => Promise<void>;
+}
+
+export type AgentRunControlUpdate = (control: AgentRunControl) => void;
 
 export interface PromptResult {
   content: string;
@@ -25,13 +38,13 @@ export interface PromptResult {
 
 export type SubmitPrompt = (
   prompt: string,
-  onToolUpdate: ToolUpdate,
-  onText: TextUpdate,
+  onEvent: AgentEventUpdate,
+  onRunControl: AgentRunControlUpdate,
 ) => Promise<PromptResult | null>;
 
 export type ApprovalSubmit = (
   request: ToolApprovalRequest,
-  approved: boolean,
-  onToolUpdate: ToolUpdate,
-  onText: TextUpdate,
+  decisions: ToolApprovalDecision[],
+  onEvent: AgentEventUpdate,
+  onRunControl: AgentRunControlUpdate,
 ) => Promise<PromptResult>;

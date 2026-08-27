@@ -11,8 +11,8 @@ export function ApprovalPrompt({
   onDecision: (approved: boolean) => void;
 }): React.ReactElement {
   useInput((input) => {
-    if (input.toLowerCase() === "y") onDecision(true);
-    if (input.toLowerCase() === "n") onDecision(false);
+    if (input === "1") onDecision(true);
+    if (input === "0") onDecision(false);
   });
 
   return (
@@ -20,7 +20,7 @@ export function ApprovalPrompt({
       <Text color={palette.accent} bold>Approval required</Text>
       <Text color={palette.text}>Tool: {request.toolCall.name}</Text>
       <Text color={palette.muted}>{JSON.stringify(request.toolCall.input, null, 2)}</Text>
-      <Text color={palette.muted}>Press y to approve or n to deny.</Text>
+      <Text color={palette.muted}>Press 1 to approve or 0 to deny.</Text>
     </Box>
   );
 }

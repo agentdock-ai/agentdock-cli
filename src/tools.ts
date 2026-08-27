@@ -1,6 +1,6 @@
 import { mkdir, readFile, readdir, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { createToolRegistry, type ToolRegistry } from "agentdock";
+import { ToolRegistry } from "agentdock";
 import { resolveWorkspacePath } from "./path-safety.js";
 
 const MAX_FILE_BYTES = 256 * 1024;
@@ -22,7 +22,7 @@ async function filesUnder(root: string, prefix = ""): Promise<string[]> {
 }
 
 export function createToolRegistryFor(config: ToolConfig): ToolRegistry {
-  const registry = createToolRegistry();
+  const registry = new ToolRegistry();
 
   registry.register({
     name: "read_file",
@@ -72,6 +72,7 @@ export function createToolRegistryFor(config: ToolConfig): ToolRegistry {
   registry.register({
     name: "write_file",
     description: "Create or replace a UTF-8 text file.",
+    requiresApproval: true,
     parameters: {
       type: "object",
       properties: { path: { type: "string" }, content: { type: "string" } },
@@ -90,6 +91,7 @@ export function createToolRegistryFor(config: ToolConfig): ToolRegistry {
   registry.register({
     name: "update_file",
     description: "Replace an exact text fragment in a UTF-8 file.",
+    requiresApproval: true,
     parameters: {
       type: "object",
       properties: { path: { type: "string" }, oldText: { type: "string" }, newText: { type: "string" } },

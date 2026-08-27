@@ -57,13 +57,13 @@ yarn build
 
 ## 🛠️ Usage
 
-Start an interactive AgentDock session using the sibling `agentdock` workspace:
+Start an interactive AgentDock session using the local `.sandbox` workspace:
 
 ```bash
 yarn start
 ```
 
-The CLI defaults to `../agentdock` as its workspace. Use `--workspace <path>` to test another project.
+The CLI defaults to `.sandbox` in this project.
 
 Once running, enter prompts continuously. Use `/help` for interactive commands. Use `/model` or `/models` to browse and select a model; the selected model is shown in the header.
 

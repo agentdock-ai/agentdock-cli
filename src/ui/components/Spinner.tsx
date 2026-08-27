@@ -35,7 +35,7 @@ export function Spinner({
   return (
     <Box marginBottom={1} paddingX={1}>
       <Text color={palette.working} bold>
-        {spinnerFrames[spinnerIndex]} Working ({elapsedSeconds}s)
+        {spinnerFrames[spinnerIndex]} Working ({elapsedSeconds}s) · Esc to Stop
       </Text>
       {toolActivity.length > 0 && (
         <Text color={palette.muted}>

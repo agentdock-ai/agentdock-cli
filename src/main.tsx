@@ -1,14 +1,16 @@
 import { loadEnvFile } from "node:process";
+import { fileURLToPath } from "node:url";
 import path from "node:path";
 import { render } from "ink";
 import React from "react";
+import type { AgentRunResult } from "agentdock";
 import { executePrompt, resumeApproval, type ApprovalInput } from "./agent.js";
 import { CliAgentRunStore } from "./agent-run-store.js";
 import { createLogger } from "./logging/logger.js";
 import { SessionStore } from "./session-store.js";
 import { resolveModelId } from "./model-catalog.js";
 import { ChatApp } from "./ui/components/ChatApp.js";
-import type { ApprovalSubmit, PromptResult, SubmitPrompt, TextUpdate, ToolUpdate } from "./ui/types.js";
+import type { ApprovalSubmit, AgentEventUpdate, AgentRunControlUpdate, PromptResult, SubmitPrompt } from "./ui/types.js";
 
 try {
   loadEnvFile();
@@ -16,7 +18,7 @@ try {
   // Shell environment variables remain supported when .env is absent.
 }
 
-const workspace = path.resolve(process.cwd(), "../agentdock");
+const workspace = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../.sandbox");
 const store = new SessionStore(path.resolve(process.cwd(), "sessions"));
 const logger = createLogger().child({ module: "main" });
 let modelId = resolveModelId(process.env.OPENROUTER_MODEL);
@@ -29,8 +31,8 @@ async function runCli(): Promise<void> {
 
   const runPrompt: SubmitPrompt = async (
     prompt: string,
-    onToolUpdate: ToolUpdate,
-    onText: TextUpdate,
+    onEvent: AgentEventUpdate,
+    onRunControl: AgentRunControlUpdate,
   ): Promise<PromptResult | null> => {
     logger.debug({ command: prompt.startsWith("/") ? prompt : undefined, promptLength: prompt.length }, "input received");
     if (prompt === "/help") return completed("/help  /mode  /runs  /inspect  /new  /tools  /clear  /exit");
@@ -56,9 +58,8 @@ async function runCli(): Promise<void> {
       modelId,
       mode: session.mode,
       runStore,
-      onToolCall: (tool) => onToolUpdate({ name: tool.name, state: "running" }),
-      onToolResult: (tool) => onToolUpdate({ name: tool.name, state: tool.error ? "error" : "complete" }),
-      onText,
+      onEvent,
+      onRunControl,
       logger,
     });
     session = await store.load(session.id);
@@ -67,21 +68,22 @@ async function runCli(): Promise<void> {
     return toPromptResult(result);
   };
 
-  const approveRun: ApprovalSubmit = async (request, approved, onToolUpdate, onText) => {
+  const approveRun: ApprovalSubmit = async (request, decisions, onEvent, onRunControl) => {
     const runStore = new CliAgentRunStore(store, session.id);
     const approval: ApprovalInput = {
       runId: findRunId(session, request.approvalId),
-      approvalId: request.approvalId,
-      approved,
-      reason: approved ? "Approved in AgentDock CLI" : "Denied in AgentDock CLI",
+      approvals: decisions.map((decision) => ({
+        approvalId: decision.approvalId,
+        approved: decision.approved,
+        reason: decision.approved ? "Approved in AgentDock CLI" : "Denied in AgentDock CLI",
+      })),
     };
     const { result } = await resumeApproval(session, approval, {
       modelId,
       mode: session.mode,
       runStore,
-      onToolCall: (tool) => onToolUpdate({ name: tool.name, state: "running" }),
-      onToolResult: (tool) => onToolUpdate({ name: tool.name, state: tool.error ? "error" : "complete" }),
-      onText,
+      onEvent,
+      onRunControl,
       logger,
     });
     session = await store.load(session.id);
@@ -112,7 +114,11 @@ async function runCli(): Promise<void> {
   logger.info({ sessionId: session.id }, "agentdock-cli stopped");
 }
 
-function toPromptResult(result: { content: string; runId: string; status: PromptResult["status"]; approvalRequests: PromptResult["approvalRequests"] }): PromptResult {
+function toPromptResult(result: AgentRunResult): PromptResult {
+  if (result.status === "running") {
+    throw new Error(`Agent run did not reach a terminal state: ${result.runId}`);
+  }
+
   return {
     content: result.content,
     runId: result.runId,
