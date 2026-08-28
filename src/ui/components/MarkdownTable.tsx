@@ -15,8 +15,9 @@ export function MarkdownTable({ headers, alignments, rows, color, first }: Markd
   const columnWidths = getColumnWidths(headers, rows);
   return (
     <Box flexDirection="column" marginTop={first ? 0 : 1} marginLeft={first ? 0 : 2}>
+      <Text color={palette.muted}>{createBorder(columnWidths, "top")}</Text>
       <TableRow cells={headers} alignments={alignments} widths={columnWidths} color={color} bold />
-      <Text color={palette.muted}>{createDivider(columnWidths)}</Text>
+      <Text color={palette.muted}>{createBorder(columnWidths, "middle")}</Text>
       {rows.map((row, index) => (
         <TableRow
           key={index}
@@ -26,6 +27,7 @@ export function MarkdownTable({ headers, alignments, rows, color, first }: Markd
           color={color}
         />
       ))}
+      <Text color={palette.muted}>{createBorder(columnWidths, "bottom")}</Text>
     </Box>
   );
 }
@@ -70,8 +72,13 @@ function getColumnWidths(headers: string[], rows: string[][]): number[] {
   ));
 }
 
-function createDivider(widths: number[]): string {
-  return `├${widths.map((width) => `─${"─".repeat(width)}─`).join("┼")}┤`;
+function createBorder(widths: number[], position: "top" | "middle" | "bottom"): string {
+  const border = position === "top"
+    ? ["┌", "┬", "┐"]
+    : position === "bottom"
+      ? ["└", "┴", "┘"]
+      : ["├", "┼", "┤"];
+  return `${border[0]}${widths.map((width) => "─".repeat(width + 2)).join(border[1])}${border[2]}`;
 }
 
 function padCell(value: string, width: number, alignment: TableAlignment): string {

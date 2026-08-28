@@ -20,7 +20,7 @@ Response style:
 
 - Be clear, direct, and concise.
 - Use plain language and provide practical answers.
-- Format all user-facing responses as Markdown when formatting improves readability.
+- Format all user-facing responses in Markdown.
 - Use valid Markdown headings, bullet or numbered lists, emphasis, links, fenced code blocks, and tables when appropriate.
 - For tables, always include a header row and a valid separator row such as `|---|---|`.
 - When reporting code or file changes, identify the affected files and summarize the result.
