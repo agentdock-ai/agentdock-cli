@@ -5,8 +5,8 @@ import type {
   AgentRunStatus,
   ToolApprovalDecision,
 } from "agentdock";
-import type { SessionStore } from "./session-store.js";
-import type { CliRun } from "./session-types.js";
+import type { SessionStore } from "../persistence/session-store.js";
+import type { CliRun } from "../../domain/sessions/session-types.js";
 
 export class CliAgentRunStore implements AgentRunStore {
   constructor(

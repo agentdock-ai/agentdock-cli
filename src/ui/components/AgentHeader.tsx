@@ -1,7 +1,7 @@
 import React from "react";
 import { Box, Text } from "ink";
 import { palette } from "../theme.js";
-import type { CliProvider } from "../../provider-settings.js";
+import type { CliProvider } from "../../infrastructure/providers/provider-settings.js";
 
 interface AgentHeaderProps {
   provider: CliProvider;

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { cliUsage, parseCliOptions } from "../dist/cli-options.js";
+import { cliUsage, parseCliOptions } from "../dist/config/cli-options.js";
 
 test("parseCliOptions accepts normal and resume launches", () => {
   assert.deepEqual(parseCliOptions([]), { command: "run" });

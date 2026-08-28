@@ -3,7 +3,7 @@ import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { test } from "node:test";
-import { createToolRegistryFor } from "../dist/tools.js";
+import { WorkspaceToolFactory } from "../dist/infrastructure/workspace/workspace-tool-factory.js";
 
 test("workspace tools hide and protect AgentDock state", async () => {
   const workspace = await mkdtemp(path.join(os.tmpdir(), "agentdock-cli-tools-"));
@@ -11,7 +11,7 @@ test("workspace tools hide and protect AgentDock state", async () => {
   await writeFile(path.join(workspace, ".agentdock", "secret.json"), "secret", "utf8");
   await writeFile(path.join(workspace, "visible.txt"), "visible", "utf8");
 
-  const registry = createToolRegistryFor({ workspaceRoot: workspace });
+  const registry = new WorkspaceToolFactory().create(workspace);
   const readFile = registry.get("read_file");
   const listFiles = registry.get("list_files");
   assert.ok(readFile);

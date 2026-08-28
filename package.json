@@ -14,10 +14,14 @@
   },
   "homepage": "https://github.com/Muhammad-Zain01/agentdock-cli#readme",
   "license": "MIT",
+  "files": [
+    "dist",
+    "prompts/SYSTEM_PROMPT.md"
+  ],
   "scripts": {
     "dev": "AGENTDOCK_DEV=true tsx src/main.tsx",
     "start": "node dist/main.js",
-    "build": "tsc -p tsconfig.json",
+    "build": "node scripts/clean-dist.mjs && tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "yarn build && node --test test/*.test.mjs",
     "logs:clear": "node scripts/clear-logs.mjs"

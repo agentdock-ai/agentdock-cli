@@ -3,7 +3,7 @@ import { mkdtemp } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { test } from "node:test";
-import { SessionStore } from "../dist/session-store.js";
+import { SessionStore } from "../dist/infrastructure/persistence/session-store.js";
 
 test("SessionStore lists resumable session summaries", async () => {
   const directory = await mkdtemp(path.join(os.tmpdir(), "agentdock-cli-session-"));

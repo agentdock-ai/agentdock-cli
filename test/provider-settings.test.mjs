@@ -6,7 +6,7 @@ import {
   listProviderModels,
   loadProviderSettings,
   toAgentModelConfig,
-} from "../dist/provider-settings.js";
+} from "../dist/infrastructure/providers/provider-settings.js";
 
 test("provider settings use safe OpenRouter defaults", () => {
   const settings = loadProviderSettings({});

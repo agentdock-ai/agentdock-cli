@@ -4,9 +4,9 @@ import type {
   AgentSessionStore,
   AgentStore,
 } from "agentdock";
-import { CliAgentRunStore } from "./agent-run-store.js";
-import type { SessionStore } from "./session-store.js";
-import type { CliSession } from "./session-types.js";
+import { CliAgentRunStore } from "./cli-agent-run-store.js";
+import type { SessionStore } from "../persistence/session-store.js";
+import type { CliSession } from "../../domain/sessions/session-types.js";
 
 export class CliAgentStore implements AgentStore {
   readonly runs: AgentRunStore;

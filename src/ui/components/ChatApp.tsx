@@ -1,15 +1,19 @@
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { Box, Text, useApp, useInput } from "ink";
-import { AgentEventType, type AgentEvent, type Message as AgentMessage, type ToolApprovalDecision, type ToolApprovalRequest } from "agentdock";
+import { type AgentEvent, type Message as AgentMessage, type ToolApprovalDecision, type ToolApprovalRequest } from "agentdock";
 import { AgentHeader } from "./AgentHeader.js";
 import { ApprovalPrompt } from "./ApprovalPrompt.js";
 import { ChatInput } from "./ChatInput.js";
 import { Message } from "./Message.js";
-import type { AgentRunControl } from "../../app-types.js";
-import type { CliProvider } from "../../provider-settings.js";
-import type { ApprovalSubmit, ChatMessage, PromptResult, SubmitPrompt, ToolActivity, ToolCallState } from "../types.js";
+import type { AgentRunControl } from "../../application/contracts/app-types.js";
+import type { CliProvider } from "../../infrastructure/providers/provider-settings.js";
+import type { ApprovalSubmit, ChatMessage, PromptResult, SubmitPrompt, ToolActivity } from "../types.js";
 import { toChatHistory } from "../session-history.js";
 import { Spinner } from "./Spinner.js";
+import { ChatRequestController } from "../controllers/chat-request-controller.js";
+import { ChatEventController } from "../controllers/chat-event-controller.js";
+import { modelOptionsFor } from "../slash-commands.js";
+import { modelCatalog } from "../../domain/models/model-catalog.js";
 
 interface ChatAppProps {
   workspace: string;
@@ -48,9 +52,15 @@ export function ChatApp({
   const [activeProvider, setActiveProvider] = useState(provider);
   const [activeModel, setActiveModel] = useState(model);
   const [activeWorkspace, setActiveWorkspace] = useState(workspace);
+  const [modelOptions, setModelOptions] = useState(() => modelOptionsFor(modelCatalog));
   const [runControl, setRunControl] = useState<AgentRunControl | null>(null);
   const [stopRequested, setStopRequested] = useState(false);
   const pendingApproval = pendingApprovals[0] ?? null;
+  const eventController = useMemo(() => new ChatEventController(), []);
+  const requestController = useMemo(
+    () => new ChatRequestController(onSubmit, onApproval),
+    [onApproval, onSubmit],
+  );
 
   useEffect(() => {
     setActiveMode(mode);
@@ -95,6 +105,7 @@ export function ChatApp({
     if (response?.mode) setActiveMode(response.mode);
     if (response?.provider) setActiveProvider(response.provider);
     if (response?.modelId) setActiveModel(response.modelId);
+    if (response?.modelOptions) setModelOptions(modelOptionsFor(response.modelOptions));
     if (response?.workspaceRoot) setActiveWorkspace(response.workspaceRoot);
     if (response?.resetConversation) {
       const history = response.history ? toChatHistory(response.history) : [];
@@ -115,86 +126,13 @@ export function ChatApp({
     setApprovalDecisions([]);
   }, [updateAssistant]);
 
-  const handleAgentEvent = useCallback((
-    event: AgentEvent,
-    assistantId: string,
-    appendText: (text: string) => void,
-  ): void => {
-    if (event.type === AgentEventType.TextDelta) {
-      appendText(event.text);
-      return;
-    }
-
-    if (event.type === AgentEventType.ToolCalled) {
-      setMessages((current) => upsertToolMessage(current, assistantId, {
-        toolCallId: event.toolCall.toolCallId,
-        toolName: event.toolCall.name,
-        toolInput: event.toolCall.input,
-        toolState: "running",
-      }));
-      setToolActivity((current) => [
-        ...current.filter((item) => item.name !== event.toolCall.name),
-        { name: event.toolCall.name, state: "running" },
-      ]);
-      return;
-    }
-
-    if (event.type === AgentEventType.ToolResult) {
-      setMessages((current) => upsertToolMessage(current, assistantId, {
-        toolCallId: event.result.toolCallId,
-        toolName: event.result.name,
-        toolInput: event.result.input,
-        toolState: "complete",
-        toolOutput: event.result.output,
-      }));
-      setToolActivity((current) => [
-        ...current.filter((item) => item.name !== event.result.name),
-        { name: event.result.name, state: "complete" },
-      ]);
-      return;
-    }
-
-    if (event.type === AgentEventType.ToolError || event.type === AgentEventType.ToolOutputDenied) {
-      setMessages((current) => upsertToolMessage(current, assistantId, {
-        toolCallId: event.toolCall.toolCallId,
-        toolName: event.toolCall.name,
-        toolInput: event.toolCall.input,
-        toolState: "error",
-        toolError: event.type === AgentEventType.ToolError ? event.error.message : "Tool output denied",
-      }));
-      setToolActivity((current) => [
-        ...current.filter((item) => item.name !== event.toolCall.name),
-        { name: event.toolCall.name, state: "error" },
-      ]);
-      return;
-    }
-
-    if (event.type === AgentEventType.ApprovalRequired) {
-      setMessages((current) => event.approvals.reduce(
-        (messages, approval) => upsertToolMessage(messages, assistantId, {
-          toolCallId: approval.toolCall.toolCallId,
-          toolName: approval.toolCall.name,
-          toolInput: approval.toolCall.input,
-          toolState: "approval_required",
-        }),
-        current,
-      ));
-      setPendingApprovals((current) => mergeApprovalRequests(current, event.approvals));
-      return;
-    }
-
-    if (event.type === AgentEventType.ApprovalResolved) {
-      setMessages((current) => event.approvals.reduce(
-        (messages, approval) => upsertToolMessage(messages, assistantId, {
-          toolCallId: approval.toolCall.toolCallId,
-          toolName: approval.toolCall.name,
-          toolInput: approval.toolCall.input,
-          toolState: "running",
-        }),
-        current,
-      ));
-    }
-  }, []);
+  const handleAgentEvent = useCallback((event: AgentEvent, assistantId: string): void => {
+    eventController.handle(event, assistantId, {
+      updateMessages: setMessages,
+      updateToolActivity: setToolActivity,
+      updateApprovals: setPendingApprovals,
+    });
+  }, [eventController]);
 
   const submit = useCallback(async (prompt: string) => {
     if (busy || pendingApproval) return;
@@ -220,17 +158,13 @@ export function ChatApp({
     setStopRequested(false);
     setBusy(true);
     setToolActivity([]);
-    let streamedContent = "";
 
     try {
-      const response = await onSubmit(
-        prompt,
-        (event) => handleAgentEvent(event, assistantId, (text) => {
-          streamedContent += text;
-          updateAssistant(assistantId, streamedContent);
-        }),
-        setRunControl,
-      );
+      const { response, streamedContent } = await requestController.submit(prompt, {
+        onEvent: (event) => handleAgentEvent(event, assistantId),
+        onRunControl: setRunControl,
+        onText: (content) => updateAssistant(assistantId, content),
+      });
       applyResult(assistantId, streamedContent, response);
     } catch (error) {
       setMessages((current) => current.map((message) => message.id === assistantId
@@ -242,7 +176,7 @@ export function ChatApp({
       setBusy(false);
       setToolActivity([]);
     }
-  }, [applyResult, busy, exit, handleAgentEvent, onClear, onSubmit, pendingApproval, updateAssistant]);
+  }, [applyResult, busy, exit, handleAgentEvent, onClear, pendingApproval, requestController, updateAssistant]);
 
   const decideApproval = useCallback(async (approved: boolean) => {
     if (!pendingApproval || busy) return;
@@ -264,18 +198,13 @@ export function ChatApp({
     setStopRequested(false);
     setBusy(true);
     setToolActivity([]);
-    let streamedContent = "";
 
     try {
-      const response = await onApproval(
-        request,
-        decisions,
-        (event) => handleAgentEvent(event, assistantId, (text) => {
-          streamedContent += text;
-          updateAssistant(assistantId, streamedContent);
-        }),
-        setRunControl,
-      );
+      const { response, streamedContent } = await requestController.approve(request, decisions, {
+        onEvent: (event) => handleAgentEvent(event, assistantId),
+        onRunControl: setRunControl,
+        onText: (content) => updateAssistant(assistantId, content),
+      });
       applyResult(assistantId, streamedContent, response);
     } catch (error) {
       setMessages((current) => current.map((message) => message.id === assistantId
@@ -287,7 +216,7 @@ export function ChatApp({
       setBusy(false);
       setToolActivity([]);
     }
-  }, [approvalDecisions, applyResult, busy, handleAgentEvent, messages, onApproval, pendingApproval, pendingApprovals, updateAssistant]);
+  }, [approvalDecisions, applyResult, busy, handleAgentEvent, messages, pendingApproval, pendingApprovals, requestController, updateAssistant]);
 
   return (
     <>
@@ -302,6 +231,7 @@ export function ChatApp({
           disabled={busy || Boolean(pendingApproval)}
           selectedModel={activeModel}
           onSelectModel={selectModel}
+          modelOptions={modelOptions}
           onSubmit={submit}
         />
         <Box paddingX={2}>
@@ -318,41 +248,4 @@ function TextMode({ mode }: { mode: "normal" | "approve_all" }): React.ReactElem
       Mode: {mode === "approve_all" ? "Approve All" : "Normal"} · Shift+Tab to switch
     </Text>
   );
-}
-
-function mergeApprovalRequests(
-  current: readonly ToolApprovalRequest[],
-  incoming: readonly ToolApprovalRequest[],
-): ToolApprovalRequest[] {
-  const requests = new Map(current.map((request) => [request.approvalId, request]));
-  for (const request of incoming) requests.set(request.approvalId, request);
-  return Array.from(requests.values());
-}
-
-function upsertToolMessage(
-  current: readonly ChatMessage[],
-  assistantId: string,
-  tool: {
-    toolCallId: string;
-    toolName: string;
-    toolInput: unknown;
-    toolState: ToolCallState;
-    toolOutput?: unknown;
-    toolError?: string;
-  },
-): ChatMessage[] {
-  const existingIndex = current.findIndex((message) => message.toolCallId === tool.toolCallId);
-  if (existingIndex >= 0) {
-    return current.map((message, index) => index === existingIndex ? { ...message, ...tool } : message);
-  }
-
-  const message: ChatMessage = {
-    id: `tool-${tool.toolCallId}`,
-    role: "system",
-    content: "",
-    ...tool,
-  };
-  const assistantIndex = current.findIndex((candidate) => candidate.id === assistantId);
-  if (assistantIndex < 0) return [...current, message];
-  return [...current.slice(0, assistantIndex), message, ...current.slice(assistantIndex)];
 }

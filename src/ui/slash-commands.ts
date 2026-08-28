@@ -1,4 +1,4 @@
-import { modelCatalog } from "../model-catalog.js";
+import { modelCatalog, type ModelDefinition } from "../domain/models/model-catalog.js";
 
 export interface SlashCommandOption {
   name: string;
@@ -12,11 +12,11 @@ export interface SlashCommandDefinition {
   options?: readonly SlashCommandOption[];
 }
 
-const modelOptions = modelCatalog.map((model) => ({
-  name: model.id,
-  label: model.label,
-  description: model.description,
-}));
+const defaultModelOptions = modelOptionsFor(modelCatalog);
+
+export function modelOptionsFor(models: readonly ModelDefinition[]): SlashCommandOption[] {
+  return models.map((model) => ({ name: model.id, label: model.label, description: model.description }));
+}
 
 const providerOptions = [
   { name: "openrouter", description: "hosted models through OpenRouter" },
@@ -45,12 +45,12 @@ export const slashCommands: readonly SlashCommandDefinition[] = [
   {
     name: "model",
     description: "select the model used by the agent",
-    options: modelOptions,
+    options: defaultModelOptions,
   },
   {
     name: "models",
     description: "list and select available models",
-    options: modelOptions,
+    options: defaultModelOptions,
   },
   { name: "new", description: "start a new session" },
   { name: "resume", description: "list or resume a saved session" },
@@ -72,7 +72,11 @@ export type SlashMenuState =
     matches: readonly SlashCommandOption[];
   };
 
-export function getSlashMenuState(value: string, cursorPosition: number): SlashMenuState | null {
+export function getSlashMenuState(
+  value: string,
+  cursorPosition: number,
+  modelOptions: readonly SlashCommandOption[] = defaultModelOptions,
+): SlashMenuState | null {
   const beforeCursor = value.slice(0, cursorPosition);
   if (!beforeCursor.startsWith("/") || beforeCursor.includes("\n")) return null;
 
@@ -88,7 +92,7 @@ export function getSlashMenuState(value: string, cursorPosition: number): SlashM
       kind: "options",
       query: "",
       command,
-      matches: command.options,
+      matches: modelOptions,
     };
   }
 
@@ -98,7 +102,8 @@ export function getSlashMenuState(value: string, cursorPosition: number): SlashM
       kind: "options",
       query: argumentQuery,
       command,
-      matches: command.options.filter((option) => option.name.startsWith(argumentQuery)),
+      matches: (isModelCommand(command.name) ? modelOptions : command.options)
+        .filter((option) => option.name.startsWith(argumentQuery)),
     };
   }
 

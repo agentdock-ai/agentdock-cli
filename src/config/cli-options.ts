@@ -1,4 +1,4 @@
-import { isValidSessionId } from "./session-id.js";
+import { isValidSessionId } from "../domain/sessions/session-id.js";
 
 export type CliOptions =
   | { command: "run"; resumeSessionId?: string }

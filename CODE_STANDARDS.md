@@ -10,6 +10,10 @@
 ## Design
 
 - Keep each module, class, and function focused on one responsibility.
+- Prefer an object-oriented application and infrastructure layer: classes should own stateful workflows, external resources, and adapter behavior.
+- Use constructor injection for repositories, providers, loaders, and services so classes can be tested without global state.
+- Use an abstract base class only when subclasses share a real contract and are interchangeable; use interfaces and composition instead of multiple inheritance.
+- Keep React components focused on presentation and user interaction; move orchestration and state transitions into controllers or services.
 - Avoid God files, God classes, and functions that coordinate too many concerns.
 - Separate domain logic, infrastructure, configuration, and presentation concerns.
 - Use abstractions only when they remove real duplication or support a real requirement.
@@ -55,6 +59,7 @@
 ## Testing
 
 - Test core behavior, public contracts, error paths, and important state transitions.
+- Test each adapter against the same contract and each controller through its public methods.
 - Prefer focused unit tests for deterministic logic and contract tests for interchangeable adapters.
 - Tests must verify real behavior; do not add fake coverage that cannot catch regressions.
 - Keep test setup proportional to the behavior being tested.

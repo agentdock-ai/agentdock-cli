@@ -1,11 +1,13 @@
 import { mkdir, readFile, readdir, rename, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
-import { isValidSessionId } from "./session-id.js";
-import type { CliSession, SessionSummary } from "./session-types.js";
+import { isValidSessionId } from "../../domain/sessions/session-id.js";
+import type { CliSession, SessionSummary } from "../../domain/sessions/session-types.js";
+import { SessionCodec } from "./session-codec.js";
 
 export class SessionStore {
   private readonly queues = new Map<string, Promise<unknown>>();
+  private readonly codec = new SessionCodec();
 
   constructor(private readonly directory: string) {}
 
@@ -84,39 +86,7 @@ export class SessionStore {
 
   private async read(id: string): Promise<CliSession> {
     const content = await readFile(this.filePath(id), "utf8");
-    let value: unknown;
-    try {
-      value = JSON.parse(content);
-    } catch {
-      throw new Error(`Invalid session JSON: ${id}`);
-    }
-
-    if (!isRecord(value) || value.version !== 1 || value.id !== id) {
-      throw new Error(`Invalid session file: ${id}`);
-    }
-    if (
-      typeof value.workspaceRoot !== "string" ||
-      typeof value.createdAt !== "string" ||
-      typeof value.updatedAt !== "string" ||
-      !Array.isArray(value.messages) ||
-      !Array.isArray(value.runs)
-    ) {
-      throw new Error(`Invalid session shape: ${id}`);
-    }
-    if (value.mode !== undefined && value.mode !== "normal" && value.mode !== "approve_all") {
-      throw new Error(`Invalid session mode: ${id}`);
-    }
-
-    const session = value as unknown as CliSession;
-    session.mode ??= "normal";
-    for (const run of session.runs) {
-      if (!isRecord(run)) throw new Error(`Invalid run in session: ${id}`);
-      run.messages ??= session.messages;
-      run.pendingApprovals ??= [];
-      run.stepsCompleted ??= 0;
-      run.updatedAt ??= run.completedAt ?? run.startedAt;
-    }
-    return session;
+    return this.codec.decode(content, id);
   }
 
   private async write(session: CliSession): Promise<void> {
@@ -125,7 +95,7 @@ export class SessionStore {
     const temporary = `${target}.${process.pid}.${randomUUID()}.tmp`;
 
     try {
-      await writeFile(temporary, `${JSON.stringify(session, null, 2)}\n`, "utf8");
+      await writeFile(temporary, this.codec.encode(session), "utf8");
       await rename(temporary, target);
     } finally {
       await rm(temporary, { force: true }).catch(() => undefined);
@@ -152,12 +122,8 @@ export class SessionStore {
   }
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null;
-}
-
 function isFileNotFound(error: unknown): boolean {
-  return isRecord(error) && error.code === "ENOENT";
+  return typeof error === "object" && error !== null && "code" in error && error.code === "ENOENT";
 }
 
 function sessionPreview(session: CliSession): string {

@@ -3,8 +3,8 @@ import { mkdtemp } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { test } from "node:test";
-import { CliAgentStore } from "../dist/agent-store.js";
-import { SessionStore } from "../dist/session-store.js";
+import { CliAgentStore } from "../dist/infrastructure/agents/cli-agent-store.js";
+import { SessionStore } from "../dist/infrastructure/persistence/session-store.js";
 
 test("CliAgentStore preserves session linkage and atomically claims approvals", async () => {
   const directory = await mkdtemp(path.join(os.tmpdir(), "agentdock-cli-store-"));

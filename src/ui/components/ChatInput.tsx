@@ -2,23 +2,24 @@ import React, { useEffect, useState } from "react";
 import { Box, Text, useInput } from "ink";
 import { SlashCommandMenu } from "./SlashCommandMenu.js";
 import { palette } from "../theme.js";
-import { getSlashMenuState, slashMenuKey, type SlashMenuState } from "../slash-commands.js";
+import { getSlashMenuState, slashMenuKey, type SlashCommandOption, type SlashMenuState } from "../slash-commands.js";
 
 interface ChatInputProps {
   disabled: boolean;
   selectedModel: string;
   onSelectModel: (modelId: string) => void;
   onSubmit: (value: string) => void;
+  modelOptions?: readonly SlashCommandOption[];
 }
 
 const placeholder = "Ask to do anything";
 
-export function ChatInput({ disabled, selectedModel, onSelectModel, onSubmit }: ChatInputProps): React.ReactElement {
+export function ChatInput({ disabled, selectedModel, onSelectModel, onSubmit, modelOptions }: ChatInputProps): React.ReactElement {
   const [value, setValue] = useState("");
   const [cursorPosition, setCursorPosition] = useState(0);
   const [hasInputFocus, setHasInputFocus] = useState(!disabled);
   const isFocused = !disabled && hasInputFocus;
-  const slashState = getSlashMenuState(value, cursorPosition);
+  const slashState = getSlashMenuState(value, cursorPosition, modelOptions);
   const slashStateKey = slashMenuKey(slashState);
   const [slashSelection, setSlashSelection] = useState(0);
   const slashMatches = slashState?.matches ?? [];
