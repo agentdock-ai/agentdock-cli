@@ -14,8 +14,8 @@ export class CliAgentStore implements AgentStore {
 
   constructor(
     storage: SessionStore,
-    private readonly sessionId: string,
-    private readonly workspaceRoot: string,
+    sessionId: string,
+    workspaceRoot: string,
   ) {
     this.runs = new CliAgentRunStore(storage, sessionId);
     this.sessions = new CliAgentSessionStore(storage, sessionId, workspaceRoot);

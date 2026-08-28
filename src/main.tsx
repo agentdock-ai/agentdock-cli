@@ -3,9 +3,9 @@ import { mkdir } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
 import { render } from "ink";
-import React from "react";
 import type { AgentRunResult } from "agentdock";
 import { executePrompt, resumeApproval, type ApprovalInput } from "./agent.js";
+import type { AgentRunControlUpdate } from "./app-types.js";
 import { CliAgentStore } from "./agent-store.js";
 import { createLogger } from "./logging/logger.js";
 import { SessionStore } from "./session-store.js";
@@ -13,7 +13,6 @@ import { resolveModelId } from "./model-catalog.js";
 import { ChatApp } from "./ui/components/ChatApp.js";
 import type {
   AgentEventUpdate,
-  AgentRunControlUpdate,
   ApprovalSubmit,
   PromptResult,
   SubmitPrompt,

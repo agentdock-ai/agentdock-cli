@@ -1,7 +1,5 @@
 import type { AgentEvent, ToolApprovalDecision, ToolApprovalRequest } from "agentdock";
-import type { AgentRunControl, AgentRunControlUpdate } from "../app-types.js";
-
-export type { AgentRunControl, AgentRunControlUpdate } from "../app-types.js";
+import type { AgentRunControlUpdate } from "../app-types.js";
 
 export type ToolState = "running" | "complete" | "error";
 export type ToolCallState = ToolState | "approval_required";

@@ -5,7 +5,8 @@ import { AgentHeader } from "./AgentHeader.js";
 import { ApprovalPrompt } from "./ApprovalPrompt.js";
 import { ChatInput } from "./ChatInput.js";
 import { Message } from "./Message.js";
-import type { AgentRunControl, ApprovalSubmit, ChatMessage, PromptResult, SubmitPrompt, ToolActivity, ToolCallState } from "../types.js";
+import type { AgentRunControl } from "../../app-types.js";
+import type { ApprovalSubmit, ChatMessage, PromptResult, SubmitPrompt, ToolActivity, ToolCallState } from "../types.js";
 import { Spinner } from "./Spinner.js";
 
 interface ChatAppProps {

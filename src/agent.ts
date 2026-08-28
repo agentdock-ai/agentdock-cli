@@ -111,7 +111,6 @@ async function executeStream(
       if (!runControlPublished) {
         runControlPublished = true;
         options.onRunControl?.({
-          runId: event.runId,
           stop: () => agent.stop(event.runId),
         });
       }

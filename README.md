@@ -16,7 +16,7 @@ AgentDock CLI provides a local interactive environment for testing agents, tools
 ## ✨ Features
 
 - **Interactive Agent Sessions:** Run prompts continuously in a local REPL.
-- **Session Persistence:** Save, inspect, resume, and reload previous sessions.
+- **Session Persistence:** Save and inspect the active session.
 - **Workspace Tools:** Read, search, list, write, and update files inside a workspace.
 - **Workspace File Tools:** Execute approved file operations inside the workspace.
 - **TypeScript First:** Fully typed and built for Node.js applications.

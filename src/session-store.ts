@@ -1,4 +1,4 @@
-import { mkdir, readFile, readdir, rename, rm, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
 import type { CliSession } from "./session-types.js";
@@ -54,18 +54,6 @@ export class SessionStore {
       await this.write(session);
       return result;
     });
-  }
-
-  async list(): Promise<CliSession[]> {
-    await mkdir(this.directory, { recursive: true });
-    const entries = await readdir(this.directory, { withFileTypes: true });
-    const sessions: CliSession[] = [];
-    for (const entry of entries) {
-      if (!entry.isFile() || !entry.name.endsWith(".json")) continue;
-      const session = await this.loadOrNull(entry.name.slice(0, -5));
-      if (session) sessions.push(session);
-    }
-    return sessions.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
   }
 
   filePath(id: string): string {
