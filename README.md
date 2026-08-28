@@ -1,11 +1,11 @@
 <div align="center">
-  <img src="https://raw.githubusercontent.com/Muhammad-Zain01/agentdock/main/logo.png?v=50cf7f7" alt="AgentDock Logo" width="250" style="margin-bottom: 20px;"/>
+  <img src="https://raw.githubusercontent.com/Muhammad-Zain01/agentdock/main/logo.png?v=d971329" alt="AgentDock Logo" width="250" style="margin-bottom: 20px;"/>
 
   **Interactive CLI playground for testing AgentDock workflows.**
 
   [![version](https://img.shields.io/badge/version-0.1.0-blue.svg?cacheSeconds=2592000)](https://github.com/Muhammad-Zain01/agentdock-cli)
   [![TypeScript](https://img.shields.io/badge/TypeScript-5.8.3-blue.svg?logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
-  [![Node.js](https://img.shields.io/badge/Node.js-%3E%3D20-green.svg?logo=nodedotjs&logoColor=white)](https://nodejs.org/)
+  [![Node.js](https://img.shields.io/badge/Node.js-%3E%3D24-green.svg?logo=nodedotjs&logoColor=white)](https://nodejs.org/)
   [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 </div>
 
