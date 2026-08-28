@@ -1,12 +1,13 @@
 import React, { useCallback, useEffect, useState } from "react";
 import { Box, Text, useApp, useInput } from "ink";
-import { AgentEventType, type AgentEvent, type ToolApprovalDecision, type ToolApprovalRequest } from "agentdock";
+import { AgentEventType, type AgentEvent, type Message as AgentMessage, type ToolApprovalDecision, type ToolApprovalRequest } from "agentdock";
 import { AgentHeader } from "./AgentHeader.js";
 import { ApprovalPrompt } from "./ApprovalPrompt.js";
 import { ChatInput } from "./ChatInput.js";
 import { Message } from "./Message.js";
 import type { AgentRunControl } from "../../app-types.js";
 import type { ApprovalSubmit, ChatMessage, PromptResult, SubmitPrompt, ToolActivity, ToolCallState } from "../types.js";
+import { toChatHistory } from "../session-history.js";
 import { Spinner } from "./Spinner.js";
 
 interface ChatAppProps {
@@ -18,6 +19,8 @@ interface ChatAppProps {
   onClear: () => void | Promise<void>;
   onSubmit: SubmitPrompt;
   onApproval: ApprovalSubmit;
+  initialHistory?: AgentMessage[];
+  initialApprovals?: ToolApprovalRequest[];
 }
 
 export function ChatApp({
@@ -29,12 +32,14 @@ export function ChatApp({
   onClear,
   onSubmit,
   onApproval,
+  initialHistory = [],
+  initialApprovals = [],
 }: ChatAppProps): React.ReactElement {
   const { exit } = useApp();
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [messages, setMessages] = useState<ChatMessage[]>(() => toChatHistory(initialHistory));
   const [toolActivity, setToolActivity] = useState<ToolActivity[]>([]);
   const [busy, setBusy] = useState(false);
-  const [pendingApprovals, setPendingApprovals] = useState<ToolApprovalRequest[]>([]);
+  const [pendingApprovals, setPendingApprovals] = useState<ToolApprovalRequest[]>(initialApprovals);
   const [approvalDecisions, setApprovalDecisions] = useState<ToolApprovalDecision[]>([]);
   const [activeMode, setActiveMode] = useState(mode);
   const [activeModel, setActiveModel] = useState(model);
@@ -86,7 +91,10 @@ export function ChatApp({
     if (response?.mode) setActiveMode(response.mode);
     if (response?.workspaceRoot) setActiveWorkspace(response.workspaceRoot);
     if (response?.resetConversation) {
-      setMessages(finalContent ? [{ id: assistantId, role: "assistant", content: finalContent }] : []);
+      const history = response.history ? toChatHistory(response.history) : [];
+      const resumedMessages = [...history];
+      if (finalContent) resumedMessages.push({ id: assistantId, role: "assistant", content: finalContent });
+      setMessages(resumedMessages);
       setPendingApprovals(response.approvalRequests);
       setApprovalDecisions([]);
       return;

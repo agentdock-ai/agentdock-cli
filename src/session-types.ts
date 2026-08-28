@@ -34,4 +34,5 @@ export interface SessionSummary {
   updatedAt: string;
   messageCount: number;
   runCount: number;
+  preview: string;
 }

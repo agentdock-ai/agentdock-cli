@@ -20,6 +20,7 @@ test("SessionStore lists resumable session summaries", async () => {
   assert.equal(summaries[0].id, session.id);
   assert.equal(summaries[0].messageCount, 1);
   assert.equal(summaries[0].runCount, 0);
+  assert.equal(summaries[0].preview, "hello");
   assert.notEqual(summaries[0].updatedAt, session.updatedAt);
 });
 

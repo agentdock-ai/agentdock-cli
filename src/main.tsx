@@ -10,7 +10,7 @@ import { cliUsage, parseCliOptions, type CliOptions } from "./cli-options.js";
 import { createLogger } from "./logging/logger.js";
 import { SessionStore } from "./session-store.js";
 import { isValidSessionId } from "./session-id.js";
-import type { SessionSummary } from "./session-types.js";
+import type { CliSession, SessionSummary } from "./session-types.js";
 import { resolveModelId } from "./model-catalog.js";
 import { ChatApp } from "./ui/components/ChatApp.js";
 import type {
@@ -75,6 +75,7 @@ async function runCli(options: Extract<CliOptions, { command: "run" }>): Promise
         session.runs
           .filter((run) => run.status === "waiting_for_approval")
           .flatMap((run) => run.pendingApprovals),
+        session.messages,
       );
     }
     if (prompt.startsWith("/mode ")) {
@@ -132,6 +133,8 @@ async function runCli(options: Extract<CliOptions, { command: "run" }>): Promise
         modelId = nextModel;
       }}
       mode={session.mode}
+      initialHistory={session.messages}
+      initialApprovals={pendingApprovals(session)}
       onClear={async () => {
         session.messages = [];
         await store.save(session);
@@ -187,6 +190,7 @@ function completed(
   mode?: "normal" | "approve_all",
   workspaceRoot?: string,
   approvalRequests: AgentRunResult["approvalRequests"] = [],
+  history?: AgentRunResult["messages"],
 ): PromptResult {
   return {
     content,
@@ -196,6 +200,7 @@ function completed(
     ...(resetConversation ? { resetConversation: true } : {}),
     ...(mode ? { mode } : {}),
     ...(workspaceRoot ? { workspaceRoot } : {}),
+    ...(history ? { history } : {}),
   };
 }
 
@@ -206,11 +211,20 @@ function formatSessionList(sessions: SessionSummary[], currentSessionId: string)
     "Saved sessions:",
     ...sessions.map((session) => {
       const current = session.id === currentSessionId ? " (current)" : "";
-      return `- ${session.id}${current}  updated ${session.updatedAt}  messages=${session.messageCount}  runs=${session.runCount}`;
+      return [
+        `- ${session.id}${current}  updated ${session.updatedAt}  messages=${session.messageCount}  runs=${session.runCount}`,
+        `  ↳ ${session.preview}`,
+      ].join("\n");
     }),
     "",
     "Use /resume <session-id> to switch sessions.",
   ].join("\n");
+}
+
+function pendingApprovals(session: CliSession): AgentRunResult["approvalRequests"] {
+  return session.runs
+    .filter((run) => run.status === "waiting_for_approval")
+    .flatMap((run) => run.pendingApprovals);
 }
 
 function findRunId(session: { runs: Array<{ id: string; pendingApprovals: Array<{ approvalId: string }> }> }, approvalId: string): string {

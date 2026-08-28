@@ -1,4 +1,4 @@
-import type { AgentEvent, ToolApprovalDecision, ToolApprovalRequest } from "agentdock";
+import type { AgentEvent, Message, ToolApprovalDecision, ToolApprovalRequest } from "agentdock";
 import type { AgentRunControlUpdate } from "../app-types.js";
 
 export type ToolState = "running" | "complete" | "error";
@@ -31,6 +31,7 @@ export interface PromptResult {
   resetConversation?: boolean;
   mode?: "normal" | "approve_all";
   workspaceRoot?: string;
+  history?: Message[];
 }
 
 export type SubmitPrompt = (
