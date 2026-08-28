@@ -42,6 +42,7 @@ export const slashCommands: readonly SlashCommandDefinition[] = [
     options: modelOptions,
   },
   { name: "new", description: "start a new session" },
+  { name: "resume", description: "list or resume a saved session" },
   { name: "tools", description: "list the tools available to the agent" },
   { name: "runs", description: "list runs in the current session" },
   { name: "inspect", description: "inspect the current session state" },

@@ -30,6 +30,7 @@ export interface PromptResult {
   approvalRequests: ToolApprovalRequest[];
   resetConversation?: boolean;
   mode?: "normal" | "approve_all";
+  workspaceRoot?: string;
 }
 
 export type SubmitPrompt = (

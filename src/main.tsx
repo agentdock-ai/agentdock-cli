@@ -1,14 +1,16 @@
 import { loadEnvFile } from "node:process";
 import { mkdir } from "node:fs/promises";
-import { fileURLToPath } from "node:url";
 import path from "node:path";
 import { render } from "ink";
 import type { AgentRunResult } from "agentdock";
 import { executePrompt, resumeApproval, type ApprovalInput } from "./agent.js";
 import type { AgentRunControlUpdate } from "./app-types.js";
 import { CliAgentStore } from "./agent-store.js";
+import { cliUsage, parseCliOptions, type CliOptions } from "./cli-options.js";
 import { createLogger } from "./logging/logger.js";
 import { SessionStore } from "./session-store.js";
+import { isValidSessionId } from "./session-id.js";
+import type { SessionSummary } from "./session-types.js";
 import { resolveModelId } from "./model-catalog.js";
 import { ChatApp } from "./ui/components/ChatApp.js";
 import type {
@@ -24,18 +26,26 @@ try {
   // Shell environment variables remain supported when .env is absent.
 }
 
-const workspace = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../.sandbox");
-const store = new SessionStore(path.resolve(process.cwd(), "sessions"));
+const defaultWorkspace = process.env.AGENTDOCK_DEV === "true"
+  ? path.resolve(process.cwd(), ".sandbox")
+  : process.cwd();
+const sessionDirectory = path.resolve(defaultWorkspace, ".agentdock", "sessions");
+const store = new SessionStore(sessionDirectory);
 const logger = createLogger().child({ module: "main" });
 let modelId = resolveModelId(process.env.OPENROUTER_MODEL);
 
-async function runCli(): Promise<void> {
-  await mkdir(workspace, { recursive: true });
-  logger.info({ workspace }, "agentdock-cli starting");
-  let session = await store.create(workspace);
-  await store.save(session);
-  logger.info({ sessionId: session.id }, "session created");
-  const createAgentStore = () => new CliAgentStore(store, session.id, workspace);
+async function runCli(options: Extract<CliOptions, { command: "run" }>): Promise<void> {
+  let session = options.resumeSessionId
+    ? await loadSession(options.resumeSessionId)
+    : store.create(defaultWorkspace);
+  await mkdir(session.workspaceRoot, { recursive: true });
+  if (!options.resumeSessionId) await store.save(session);
+  logger.info({ sessionId: session.id, workspace: session.workspaceRoot }, "agentdock-cli starting");
+  logger.info(
+    { sessionId: session.id },
+    options.resumeSessionId ? "session resumed" : "session created",
+  );
+  const createAgentStore = () => new CliAgentStore(store, session.id, session.workspaceRoot);
 
   const runPrompt: SubmitPrompt = async (
     prompt: string,
@@ -43,10 +53,30 @@ async function runCli(): Promise<void> {
     onRunControl: AgentRunControlUpdate,
   ): Promise<PromptResult | null> => {
     logger.debug({ command: prompt.startsWith("/") ? prompt : undefined, promptLength: prompt.length }, "input received");
-    if (prompt === "/help") return completed("/help  /mode  /runs  /inspect  /new  /tools  /clear  /exit");
+    if (prompt === "/help") return completed("/help  /mode  /runs  /inspect  /new  /resume  /tools  /clear  /exit");
     if (prompt === "/tools") return completed("read_file, list_files, search_files, write_file, update_file");
     if (prompt === "/inspect") return completed(JSON.stringify(session, null, 2));
     if (prompt === "/runs") return completed(JSON.stringify(session.runs, null, 2));
+    if (prompt === "/resume") return completed(formatSessionList(await store.list(), session.id));
+    if (prompt.startsWith("/resume ")) {
+      const resumeSessionId = prompt.slice("/resume ".length).trim();
+      if (!isValidSessionId(resumeSessionId)) {
+        return completed("Usage: /resume <session-id>");
+      }
+      const resumed = await loadSession(resumeSessionId);
+      await mkdir(resumed.workspaceRoot, { recursive: true });
+      session = resumed;
+      logger.info({ sessionId: session.id }, "session resumed from command");
+      return completed(
+        `Resumed session ${session.id}`,
+        true,
+        session.mode,
+        session.workspaceRoot,
+        session.runs
+          .filter((run) => run.status === "waiting_for_approval")
+          .flatMap((run) => run.pendingApprovals),
+      );
+    }
     if (prompt.startsWith("/mode ")) {
       const value = prompt.slice("/mode ".length).trim();
       if (value !== "normal" && value !== "approve-all") return completed("Usage: /mode normal|approve-all");
@@ -55,10 +85,10 @@ async function runCli(): Promise<void> {
       return completed(`Mode switched to ${session.mode === "approve_all" ? "Approve All" : "Normal"}`);
     }
     if (prompt === "/new") {
-      session = await store.create(workspace);
+      session = store.create(defaultWorkspace);
       await store.save(session);
       logger.info({ sessionId: session.id }, "session created from command");
-      return completed(`Started session ${session.id}`, true, "normal");
+      return completed(`Started session ${session.id}`, true, "normal", session.workspaceRoot);
     }
 
     const { result } = await executePrompt(session, prompt, {
@@ -96,7 +126,7 @@ async function runCli(): Promise<void> {
 
   const instance = render(
     <ChatApp
-      workspace={workspace}
+      workspace={session.workspaceRoot}
       model={modelId}
       onChangeModel={(nextModel) => {
         modelId = nextModel;
@@ -115,9 +145,27 @@ async function runCli(): Promise<void> {
     />,
   );
 
-  await instance.waitUntilExit();
-  await store.save(session);
-  logger.info({ sessionId: session.id }, "agentdock-cli stopped");
+  try {
+    await instance.waitUntilExit();
+  } finally {
+    const latest = await store.loadOrNull(session.id);
+    if (latest) session = latest;
+    logger.info({ sessionId: session.id }, "agentdock-cli stopped");
+    console.log(`\nSession saved: ${session.id}`);
+    console.log("Resume with:");
+    console.log(`  yarn dev --resume ${session.id}`);
+    console.log(`  agentdock --resume ${session.id}`);
+  }
+}
+
+async function loadSession(sessionId: string) {
+  const session = await store.load(sessionId);
+  if (session.workspaceRoot === defaultWorkspace) return session;
+
+  await store.update(sessionId, (current) => {
+    current.workspaceRoot = defaultWorkspace;
+  });
+  return store.load(sessionId);
 }
 
 function toPromptResult(result: AgentRunResult): PromptResult {
@@ -137,15 +185,32 @@ function completed(
   content: string,
   resetConversation = false,
   mode?: "normal" | "approve_all",
+  workspaceRoot?: string,
+  approvalRequests: AgentRunResult["approvalRequests"] = [],
 ): PromptResult {
   return {
     content,
     runId: "",
     status: "completed",
-    approvalRequests: [],
+    approvalRequests,
     ...(resetConversation ? { resetConversation: true } : {}),
     ...(mode ? { mode } : {}),
+    ...(workspaceRoot ? { workspaceRoot } : {}),
   };
+}
+
+function formatSessionList(sessions: SessionSummary[], currentSessionId: string): string {
+  if (sessions.length === 0) return "No saved sessions found.";
+
+  return [
+    "Saved sessions:",
+    ...sessions.map((session) => {
+      const current = session.id === currentSessionId ? " (current)" : "";
+      return `- ${session.id}${current}  updated ${session.updatedAt}  messages=${session.messageCount}  runs=${session.runCount}`;
+    }),
+    "",
+    "Use /resume <session-id> to switch sessions.",
+  ].join("\n");
 }
 
 function findRunId(session: { runs: Array<{ id: string; pendingApprovals: Array<{ approvalId: string }> }> }, approvalId: string): string {
@@ -154,8 +219,20 @@ function findRunId(session: { runs: Array<{ id: string; pendingApprovals: Array<
   return run.id;
 }
 
-runCli().catch((error: unknown) => {
-  logger.error({ err: error }, "agentdock-cli failed");
-  console.error(error instanceof Error ? error.message : String(error));
-  process.exitCode = 1;
-});
+async function main(): Promise<void> {
+  try {
+    const options = parseCliOptions(process.argv.slice(2));
+    if (options.command === "help") {
+      console.log(cliUsage);
+      return;
+    }
+    await runCli(options);
+  } catch (error: unknown) {
+    logger.error({ err: error }, "agentdock-cli failed");
+    console.error(error instanceof Error ? error.message : String(error));
+    console.error(cliUsage);
+    process.exitCode = 1;
+  }
+}
+
+void main();

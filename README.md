@@ -16,7 +16,7 @@ AgentDock CLI provides a local interactive environment for testing agents, tools
 ## ✨ Features
 
 - **Interactive Agent Sessions:** Run prompts continuously in a local REPL.
-- **Session Persistence:** Save and inspect the active session.
+- **Session Persistence:** Save, inspect, and resume sessions.
 - **Workspace Tools:** Read, search, list, write, and update files inside a workspace.
 - **Workspace File Tools:** Execute approved file operations inside the workspace.
 - **TypeScript First:** Fully typed and built for Node.js applications.
@@ -57,24 +57,33 @@ yarn build
 
 ## 🛠️ Usage
 
-Start an interactive AgentDock session using the local `.sandbox` workspace:
+Start an interactive AgentDock session using the current working directory as the workspace:
 
 ```bash
 yarn start
 ```
 
-The CLI defaults to `.sandbox` in this project.
+`yarn dev` uses a local `.sandbox` workspace for safe testing. The installed `agentdock` command uses the directory where it is launched as the workspace.
 
 Once running, enter prompts continuously. Use `/help` for interactive commands. Use `/model` or `/models` to browse and select a model; the selected model is shown in the header.
 
-Sessions are stored under `sessions/` and are ignored by git.
+Sessions are stored under `.agentdock/sessions/` in the directory where the CLI is launched.
+
+Resume a saved session from the command line:
+
+```bash
+yarn dev --resume <session-id>
+agentdock --resume <session-id>
+```
+
+Inside the CLI, use `/resume` to list saved sessions and `/resume <session-id>` to switch to one.
 
 ## 🧾 Debug Logging
 
 Readable, colorized logs are written to `logs/agentdock-cli.log` when logging is enabled. Entries include their source module, such as `main` or `agent`:
 
 ```text
-INFO  [main] agentdock-cli starting workspace=/Volumes/Code/Github/agentdock
+INFO  [main] agentdock-cli starting workspace=/Volumes/Code/Github/my-project
 DEBUG [agent] tool started tool=list_files
 INFO  [agent] agent prompt completed durationMs=8312 chunks=17 tools=1
 ```

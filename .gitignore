@@ -1,5 +1,6 @@
 node_modules/
 dist/
+.agentdock/
 sessions/*.json
 logs/
 .env

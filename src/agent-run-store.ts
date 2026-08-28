@@ -37,7 +37,12 @@ export class CliAgentRunStore implements AgentRunStore {
       if (index < 0) throw new Error(`CLI run not found: ${runId}`);
       const current = toAgentRun(session.runs[index], session, this.sessionId);
       assertUpdateIdentity(update, runId, this.sessionId);
-      session.runs[index] = fromAgentRun({ ...current, ...update, runId });
+      session.runs[index] = fromAgentRun({
+        ...current,
+        ...update,
+        runId,
+        updatedAt: Date.now(),
+      });
     });
   }
 
@@ -56,7 +61,12 @@ export class CliAgentRunStore implements AgentRunStore {
 
       const current = toAgentRun(run, session, this.sessionId);
       assertUpdateIdentity(update, runId, this.sessionId);
-      session.runs[index] = fromAgentRun({ ...current, ...update, runId });
+      session.runs[index] = fromAgentRun({
+        ...current,
+        ...update,
+        runId,
+        updatedAt: Date.now(),
+      });
       return true;
     });
   }

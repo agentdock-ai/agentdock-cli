@@ -5,6 +5,7 @@
   "private": true,
   "type": "module",
   "bin": {
+    "agentdock": "./dist/main.js",
     "agentdock-cli": "./dist/main.js"
   },
   "repository": {
@@ -14,10 +15,11 @@
   "homepage": "https://github.com/Muhammad-Zain01/agentdock-cli#readme",
   "license": "MIT",
   "scripts": {
-    "dev": "tsx src/main.tsx",
+    "dev": "AGENTDOCK_DEV=true tsx src/main.tsx",
     "start": "node dist/main.js",
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "yarn build && node --test test/*.test.mjs",
     "logs:clear": "node scripts/clear-logs.mjs"
   },
   "dependencies": {

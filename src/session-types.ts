@@ -27,3 +27,11 @@ export interface CliSession {
   latestRunId?: string;
   mode: "normal" | "approve_all";
 }
+
+export interface SessionSummary {
+  id: string;
+  createdAt: string;
+  updatedAt: string;
+  messageCount: number;
+  runCount: number;
+}

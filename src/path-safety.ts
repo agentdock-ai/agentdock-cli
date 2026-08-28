@@ -4,10 +4,12 @@ import { lstat, realpath } from "node:fs/promises";
 export async function resolveWorkspacePath(
   workspaceRoot: string,
   input: string,
+  blockedDirectories: ReadonlySet<string> = new Set(),
 ): Promise<string> {
   const root = await realpath(workspaceRoot);
   const resolved = path.resolve(root, input);
   assertInside(root, resolved, input);
+  assertNotBlocked(root, resolved, input, blockedDirectories);
 
   let currentPath = resolved;
   while (currentPath !== root) {
@@ -25,6 +27,18 @@ export async function resolveWorkspacePath(
   }
 
   return resolved;
+}
+
+function assertNotBlocked(
+  root: string,
+  resolved: string,
+  input: string,
+  blockedDirectories: ReadonlySet<string>,
+): void {
+  const segments = path.relative(root, resolved).split(path.sep);
+  if (segments.some((segment) => blockedDirectories.has(segment))) {
+    throw new Error(`Protected workspace path: ${input}`);
+  }
 }
 
 function assertInside(root: string, resolved: string, input: string): void {

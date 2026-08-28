@@ -38,6 +38,7 @@ export function ChatApp({
   const [approvalDecisions, setApprovalDecisions] = useState<ToolApprovalDecision[]>([]);
   const [activeMode, setActiveMode] = useState(mode);
   const [activeModel, setActiveModel] = useState(model);
+  const [activeWorkspace, setActiveWorkspace] = useState(workspace);
   const [runControl, setRunControl] = useState<AgentRunControl | null>(null);
   const [stopRequested, setStopRequested] = useState(false);
   const pendingApproval = pendingApprovals[0] ?? null;
@@ -49,6 +50,10 @@ export function ChatApp({
   useEffect(() => {
     setActiveModel(model);
   }, [model]);
+
+  useEffect(() => {
+    setActiveWorkspace(workspace);
+  }, [workspace]);
 
   const selectModel = useCallback((nextModel: string) => {
     setActiveModel(nextModel);
@@ -79,9 +84,10 @@ export function ChatApp({
   const applyResult = useCallback((assistantId: string, streamedContent: string, response: PromptResult | null) => {
     const finalContent = response?.content || streamedContent;
     if (response?.mode) setActiveMode(response.mode);
+    if (response?.workspaceRoot) setActiveWorkspace(response.workspaceRoot);
     if (response?.resetConversation) {
       setMessages(finalContent ? [{ id: assistantId, role: "assistant", content: finalContent }] : []);
-      setPendingApprovals([]);
+      setPendingApprovals(response.approvalRequests);
       setApprovalDecisions([]);
       return;
     }
@@ -271,7 +277,7 @@ export function ChatApp({
 
   return (
     <>
-      <AgentHeader workspace={workspace} model={activeModel} mode={activeMode} />
+      <AgentHeader workspace={activeWorkspace} model={activeModel} mode={activeMode} />
       <Box flexDirection="column">
         {messages.map((message) => <Message key={message.id} message={message} />)}
       </Box>

@@ -1,7 +1,8 @@
-import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
+import { mkdir, readFile, readdir, rename, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
-import type { CliSession } from "./session-types.js";
+import { isValidSessionId } from "./session-id.js";
+import type { CliSession, SessionSummary } from "./session-types.js";
 
 export class SessionStore {
   private readonly queues = new Map<string, Promise<unknown>>();
@@ -51,13 +52,32 @@ export class SessionStore {
     return this.enqueue(id, async () => {
       const session = await this.read(id);
       const result = await updater(session);
+      session.updatedAt = new Date().toISOString();
       await this.write(session);
       return result;
     });
   }
 
+  async list(): Promise<SessionSummary[]> {
+    await mkdir(this.directory, { recursive: true });
+    const entries = await readdir(this.directory, { withFileTypes: true });
+    const summaries: SessionSummary[] = [];
+    for (const entry of entries) {
+      if (!entry.isFile() || !entry.name.endsWith(".json")) continue;
+      const session = await this.load(entry.name.slice(0, -5));
+      summaries.push({
+        id: session.id,
+        createdAt: session.createdAt,
+        updatedAt: session.updatedAt,
+        messageCount: session.messages.length,
+        runCount: session.runs.length,
+      });
+    }
+    return summaries.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+  }
+
   filePath(id: string): string {
-    if (!/^[a-zA-Z0-9-]+$/.test(id)) throw new Error("Invalid session id");
+    if (!isValidSessionId(id)) throw new Error("Invalid session id");
     return path.join(this.directory, `${id}.json`);
   }
 
