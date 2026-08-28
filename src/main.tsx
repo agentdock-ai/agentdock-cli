@@ -10,8 +10,16 @@ import { cliUsage, parseCliOptions, type CliOptions } from "./cli-options.js";
 import { createLogger } from "./logging/logger.js";
 import { SessionStore } from "./session-store.js";
 import { isValidSessionId } from "./session-id.js";
+import {
+  listProviderModels,
+  loadProviderSettings,
+  parseProvider,
+  switchProvider,
+  type CliProvider,
+  type ProviderSettings,
+} from "./provider-settings.js";
 import type { CliSession, SessionSummary } from "./session-types.js";
-import { resolveModelId } from "./model-catalog.js";
+import type { ModelDefinition } from "./model-catalog.js";
 import { ChatApp } from "./ui/components/ChatApp.js";
 import type {
   AgentEventUpdate,
@@ -32,7 +40,7 @@ const defaultWorkspace = process.env.AGENTDOCK_DEV === "true"
 const sessionDirectory = path.resolve(defaultWorkspace, ".agentdock", "sessions");
 const store = new SessionStore(sessionDirectory);
 const logger = createLogger().child({ module: "main" });
-let modelId = resolveModelId(process.env.OPENROUTER_MODEL);
+let providerSettings = loadProviderSettings();
 
 async function runCli(options: Extract<CliOptions, { command: "run" }>): Promise<void> {
   let session = options.resumeSessionId
@@ -53,11 +61,52 @@ async function runCli(options: Extract<CliOptions, { command: "run" }>): Promise
     onRunControl: AgentRunControlUpdate,
   ): Promise<PromptResult | null> => {
     logger.debug({ command: prompt.startsWith("/") ? prompt : undefined, promptLength: prompt.length }, "input received");
-    if (prompt === "/help") return completed("/help  /mode  /runs  /inspect  /new  /resume  /tools  /clear  /exit");
+    if (prompt === "/help") return completed("/help  /settings  /provider  /models  /model  /mode  /runs  /inspect  /new  /resume  /tools  /clear  /exit");
     if (prompt === "/tools") return completed("read_file, list_files, search_files, write_file, update_file");
     if (prompt === "/inspect") return completed(JSON.stringify(session, null, 2));
     if (prompt === "/runs") return completed(JSON.stringify(session.runs, null, 2));
     if (prompt === "/resume") return completed(formatSessionList(await store.list(), session.id));
+    if (prompt === "/settings") return settingsResult(providerSettings);
+    if (prompt === "/provider") return settingsResult(providerSettings);
+    if (prompt.startsWith("/provider ")) {
+      const provider = parseProvider(prompt.slice("/provider ".length));
+      providerSettings = switchProvider(providerSettings, provider);
+      return completed(
+        `Provider switched to ${providerSettings.provider}. Model reset to ${providerSettings.modelId}.`,
+        false,
+        undefined,
+        undefined,
+        [],
+        undefined,
+        providerSettings.provider,
+        providerSettings.modelId,
+      );
+    }
+    if (prompt === "/models") {
+      try {
+        return completed(formatModelList(providerSettings, await listProviderModels(providerSettings)));
+      } catch (error: unknown) {
+        return completed(errorMessage(error));
+      }
+    }
+    if (prompt === "/model") {
+      return completed(`Current model: ${providerSettings.modelId}\nUse /model <model-id> to change it.`);
+    }
+    if (prompt.startsWith("/model ")) {
+      const modelId = prompt.slice("/model ".length).trim();
+      if (!modelId) return completed("Usage: /model <model-id>");
+      providerSettings = { ...providerSettings, modelId };
+      return completed(
+        `Model switched to ${modelId}.`,
+        false,
+        undefined,
+        undefined,
+        [],
+        undefined,
+        providerSettings.provider,
+        providerSettings.modelId,
+      );
+    }
     if (prompt.startsWith("/resume ")) {
       const resumeSessionId = prompt.slice("/resume ".length).trim();
       if (!isValidSessionId(resumeSessionId)) {
@@ -93,8 +142,8 @@ async function runCli(options: Extract<CliOptions, { command: "run" }>): Promise
     }
 
     const { result } = await executePrompt(session, prompt, {
-      modelId,
       mode: session.mode,
+      providerSettings,
       store: createAgentStore(),
       onEvent,
       onRunControl,
@@ -114,8 +163,8 @@ async function runCli(options: Extract<CliOptions, { command: "run" }>): Promise
       })),
     };
     const { result } = await resumeApproval(session, approval, {
-      modelId,
       mode: session.mode,
+      providerSettings,
       store: createAgentStore(),
       onEvent,
       onRunControl,
@@ -128,9 +177,10 @@ async function runCli(options: Extract<CliOptions, { command: "run" }>): Promise
   const instance = render(
     <ChatApp
       workspace={session.workspaceRoot}
-      model={modelId}
+      provider={providerSettings.provider}
+      model={providerSettings.modelId}
       onChangeModel={(nextModel) => {
-        modelId = nextModel;
+        providerSettings = { ...providerSettings, modelId: nextModel };
       }}
       mode={session.mode}
       initialHistory={session.messages}
@@ -184,6 +234,38 @@ function toPromptResult(result: AgentRunResult): PromptResult {
   };
 }
 
+function settingsResult(settings: ProviderSettings): PromptResult {
+  return completed(formatProviderSettings(settings), false, undefined, undefined, [], undefined, settings.provider, settings.modelId);
+}
+
+function formatProviderSettings(settings: ProviderSettings): string {
+  return [
+    "Provider settings:",
+    `- provider: ${settings.provider}`,
+    `- model: ${settings.modelId}`,
+    `- OpenRouter API key: ${settings.openrouterApiKey ? "configured" : "not configured"}`,
+    `- Ollama URL: ${settings.ollamaBaseUrl}`,
+    `- Ollama API key: ${settings.ollamaApiKey ? "configured" : "not configured"}`,
+    "",
+    "Change provider with /provider openrouter or /provider ollama.",
+    "Set credentials and URLs with OPENROUTER_API_KEY, OLLAMA_API_KEY, and OLLAMA_BASE_URL.",
+  ].join("\n");
+}
+
+function formatModelList(settings: ProviderSettings, models: readonly ModelDefinition[]): string {
+  if (models.length === 0) return `No ${settings.provider} models found.`;
+  return [
+    `${settings.provider} models:`,
+    ...models.map((model) => `- ${model.id} — ${model.description}`),
+    "",
+    "Use /model <model-id> to select a model.",
+  ].join("\n");
+}
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
 function completed(
   content: string,
   resetConversation = false,
@@ -191,6 +273,8 @@ function completed(
   workspaceRoot?: string,
   approvalRequests: AgentRunResult["approvalRequests"] = [],
   history?: AgentRunResult["messages"],
+  provider?: CliProvider,
+  modelId?: string,
 ): PromptResult {
   return {
     content,
@@ -201,6 +285,8 @@ function completed(
     ...(mode ? { mode } : {}),
     ...(workspaceRoot ? { workspaceRoot } : {}),
     ...(history ? { history } : {}),
+    ...(provider ? { provider } : {}),
+    ...(modelId ? { modelId } : {}),
   };
 }
 

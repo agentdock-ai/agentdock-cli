@@ -6,12 +6,14 @@ import { ApprovalPrompt } from "./ApprovalPrompt.js";
 import { ChatInput } from "./ChatInput.js";
 import { Message } from "./Message.js";
 import type { AgentRunControl } from "../../app-types.js";
+import type { CliProvider } from "../../provider-settings.js";
 import type { ApprovalSubmit, ChatMessage, PromptResult, SubmitPrompt, ToolActivity, ToolCallState } from "../types.js";
 import { toChatHistory } from "../session-history.js";
 import { Spinner } from "./Spinner.js";
 
 interface ChatAppProps {
   workspace: string;
+  provider: CliProvider;
   model: string;
   onChangeModel: (model: string) => void | Promise<void>;
   mode: "normal" | "approve_all";
@@ -25,6 +27,7 @@ interface ChatAppProps {
 
 export function ChatApp({
   workspace,
+  provider,
   model,
   onChangeModel,
   mode,
@@ -42,6 +45,7 @@ export function ChatApp({
   const [pendingApprovals, setPendingApprovals] = useState<ToolApprovalRequest[]>(initialApprovals);
   const [approvalDecisions, setApprovalDecisions] = useState<ToolApprovalDecision[]>([]);
   const [activeMode, setActiveMode] = useState(mode);
+  const [activeProvider, setActiveProvider] = useState(provider);
   const [activeModel, setActiveModel] = useState(model);
   const [activeWorkspace, setActiveWorkspace] = useState(workspace);
   const [runControl, setRunControl] = useState<AgentRunControl | null>(null);
@@ -89,6 +93,8 @@ export function ChatApp({
   const applyResult = useCallback((assistantId: string, streamedContent: string, response: PromptResult | null) => {
     const finalContent = response?.content || streamedContent;
     if (response?.mode) setActiveMode(response.mode);
+    if (response?.provider) setActiveProvider(response.provider);
+    if (response?.modelId) setActiveModel(response.modelId);
     if (response?.workspaceRoot) setActiveWorkspace(response.workspaceRoot);
     if (response?.resetConversation) {
       const history = response.history ? toChatHistory(response.history) : [];
@@ -285,7 +291,7 @@ export function ChatApp({
 
   return (
     <>
-      <AgentHeader workspace={activeWorkspace} model={activeModel} mode={activeMode} />
+      <AgentHeader provider={activeProvider} workspace={activeWorkspace} model={activeModel} mode={activeMode} />
       <Box flexDirection="column">
         {messages.map((message) => <Message key={message.id} message={message} />)}
       </Box>

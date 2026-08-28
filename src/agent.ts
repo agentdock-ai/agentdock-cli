@@ -12,13 +12,14 @@ import {
 import { createToolRegistryFor } from "./tools.js";
 import type { AgentRunControlUpdate } from "./app-types.js";
 import type { AppLogger } from "./logging/logger.js";
+import { toAgentModelConfig, type ProviderSettings } from "./provider-settings.js";
 import type { CliSession } from "./session-types.js";
 
 const MAX_AGENT_STEPS = 30;
 const modelFactory = new AgentModelFactory();
 
 export interface PromptOptions {
-  modelId: string;
+  providerSettings: ProviderSettings;
   mode: CliSession["mode"];
   logger: AppLogger;
   store: AgentStore;
@@ -67,10 +68,7 @@ async function executeStream(
     organizationId: "cli-organization",
   };
   const agent = new AgentDock({
-    model: modelFactory.create({
-      provider: "openrouter",
-      modelId: options.modelId,
-    }),
+    model: modelFactory.create(toAgentModelConfig(options.providerSettings)),
     registry: createToolRegistryFor({ workspaceRoot: session.workspaceRoot }),
     store: options.store,
   });
@@ -81,7 +79,12 @@ async function executeStream(
   let runControlPublished = false;
 
   logger.info(
-    { promptLength: prompt.length, modelId: options.modelId, mode: options.mode },
+    {
+      promptLength: prompt.length,
+      provider: options.providerSettings.provider,
+      modelId: options.providerSettings.modelId,
+      mode: options.mode,
+    },
     approval ? "agent approval resume started" : "agent prompt started",
   );
 

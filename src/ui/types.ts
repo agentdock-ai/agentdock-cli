@@ -1,5 +1,6 @@
 import type { AgentEvent, Message, ToolApprovalDecision, ToolApprovalRequest } from "agentdock";
 import type { AgentRunControlUpdate } from "../app-types.js";
+import type { CliProvider } from "../provider-settings.js";
 
 export type ToolState = "running" | "complete" | "error";
 export type ToolCallState = ToolState | "approval_required";
@@ -32,6 +33,8 @@ export interface PromptResult {
   mode?: "normal" | "approve_all";
   workspaceRoot?: string;
   history?: Message[];
+  provider?: CliProvider;
+  modelId?: string;
 }
 
 export type SubmitPrompt = (

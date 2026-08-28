@@ -65,7 +65,3 @@ export const modelCatalog: readonly ModelDefinition[] = [
 ];
 
 export const defaultModelId = modelCatalog[0].id;
-
-export function resolveModelId(configuredModelId: string | undefined): string {
-  return configuredModelId?.trim() || defaultModelId;
-}

@@ -18,11 +18,22 @@ const modelOptions = modelCatalog.map((model) => ({
   description: model.description,
 }));
 
+const providerOptions = [
+  { name: "openrouter", description: "hosted models through OpenRouter" },
+  { name: "ollama", description: "local or self-hosted Ollama models" },
+] as const;
+
 export const slashCommands: readonly SlashCommandDefinition[] = [
   { name: "help", description: "show available commands" },
   { name: "clear", description: "clear the conversation" },
   { name: "exit", description: "exit AgentDock CLI" },
   { name: "quit", description: "exit AgentDock CLI" },
+  { name: "settings", description: "show provider and model settings" },
+  {
+    name: "provider",
+    description: "switch between OpenRouter and Ollama",
+    options: providerOptions,
+  },
   {
     name: "mode",
     description: "choose how tool approvals are handled",

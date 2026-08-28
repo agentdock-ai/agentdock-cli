@@ -1,8 +1,10 @@
 import React from "react";
 import { Box, Text } from "ink";
 import { palette } from "../theme.js";
+import type { CliProvider } from "../../provider-settings.js";
 
 interface AgentHeaderProps {
+  provider: CliProvider;
   workspace: string;
   model: string;
   mode: "normal" | "approve_all";
@@ -13,7 +15,7 @@ function compactPath(value: string): string {
   return parts.length > 2 ? `…/${parts.slice(-2).join("/")}` : value;
 }
 
-export function AgentHeader({ workspace, model, mode }: AgentHeaderProps): React.ReactElement {
+export function AgentHeader({ provider, workspace, model, mode }: AgentHeaderProps): React.ReactElement {
   return (
     <Box
       width="100%"
@@ -34,6 +36,10 @@ export function AgentHeader({ workspace, model, mode }: AgentHeaderProps): React
           </Box>
           <Text color={palette.muted}>agent terminal</Text>
           <Box marginTop={1} flexDirection="column">
+            <Box>
+              <Text color={palette.accent} bold>PROVIDER </Text>
+              <Text color={palette.text}>{provider}</Text>
+            </Box>
             <Box>
               <Text color={palette.accent} bold>MODEL </Text>
               <Text color={palette.text}>{model}</Text>
