@@ -1,4 +1,7 @@
 import type { AgentEvent, ToolApprovalDecision, ToolApprovalRequest } from "agentdock";
+import type { AgentRunControl, AgentRunControlUpdate } from "../app-types.js";
+
+export type { AgentRunControl, AgentRunControlUpdate } from "../app-types.js";
 
 export type ToolState = "running" | "complete" | "error";
 export type ToolCallState = ToolState | "approval_required";
@@ -22,18 +25,13 @@ export interface ChatMessage {
 
 export type AgentEventUpdate = (event: AgentEvent) => void;
 
-export interface AgentRunControl {
-  runId: string;
-  stop: () => Promise<void>;
-}
-
-export type AgentRunControlUpdate = (control: AgentRunControl) => void;
-
 export interface PromptResult {
   content: string;
   runId: string;
   status: "completed" | "waiting_for_approval" | "failed" | "cancelled";
   approvalRequests: ToolApprovalRequest[];
+  resetConversation?: boolean;
+  mode?: "normal" | "approve_all";
 }
 
 export type SubmitPrompt = (

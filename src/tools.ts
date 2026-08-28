@@ -4,19 +4,30 @@ import { ToolRegistry } from "agentdock";
 import { resolveWorkspacePath } from "./path-safety.js";
 
 const MAX_FILE_BYTES = 256 * 1024;
+const MAX_WORKSPACE_FILES = 10_000;
 
 interface ToolConfig {
   workspaceRoot: string;
 }
 
-async function filesUnder(root: string, prefix = ""): Promise<string[]> {
+async function filesUnder(
+  root: string,
+  prefix = "",
+  state = { count: 0 },
+): Promise<string[]> {
   const entries = await readdir(root, { withFileTypes: true });
   const files: string[] = [];
   for (const entry of entries) {
-    if (entry.name === ".git" || entry.name === "node_modules") continue;
+    if (entry.name === ".git" || entry.name === "node_modules" || entry.isSymbolicLink()) continue;
     const relative = path.join(prefix, entry.name);
     if (entry.isDirectory()) files.push(...await filesUnder(path.join(root, entry.name), relative));
-    else files.push(relative);
+    else {
+      state.count += 1;
+      if (state.count > MAX_WORKSPACE_FILES) {
+        throw new Error(`Workspace contains more than ${MAX_WORKSPACE_FILES} files`);
+      }
+      files.push(relative);
+    }
   }
   return files;
 }
@@ -33,7 +44,7 @@ export function createToolRegistryFor(config: ToolConfig): ToolRegistry {
       required: ["path"],
     },
     execute: async ({ input }) => {
-      const filePath = resolveWorkspacePath(config.workspaceRoot, String(input.path));
+      const filePath = await resolveWorkspacePath(config.workspaceRoot, String(input.path));
       const info = await stat(filePath);
       if (info.size > MAX_FILE_BYTES) throw new Error("File exceeds the read size limit");
       return { path: path.relative(config.workspaceRoot, filePath), content: await readFile(filePath, "utf8") };
@@ -59,7 +70,7 @@ export function createToolRegistryFor(config: ToolConfig): ToolRegistry {
       const query = String(input.query);
       const matches: string[] = [];
       for (const relative of await filesUnder(config.workspaceRoot)) {
-        const filePath = resolveWorkspacePath(config.workspaceRoot, relative);
+        const filePath = await resolveWorkspacePath(config.workspaceRoot, relative);
         const info = await stat(filePath);
         if (info.size > MAX_FILE_BYTES) continue;
         const content = await readFile(filePath, "utf8");
@@ -79,7 +90,7 @@ export function createToolRegistryFor(config: ToolConfig): ToolRegistry {
       required: ["path", "content"],
     },
     execute: async ({ input }) => {
-      const filePath = resolveWorkspacePath(config.workspaceRoot, String(input.path));
+      const filePath = await resolveWorkspacePath(config.workspaceRoot, String(input.path));
       const content = String(input.content);
       if (Buffer.byteLength(content, "utf8") > MAX_FILE_BYTES) throw new Error("File exceeds the write size limit");
       await mkdir(path.dirname(filePath), { recursive: true });
@@ -98,7 +109,7 @@ export function createToolRegistryFor(config: ToolConfig): ToolRegistry {
       required: ["path", "oldText", "newText"],
     },
     execute: async ({ input }) => {
-      const filePath = resolveWorkspacePath(config.workspaceRoot, String(input.path));
+      const filePath = await resolveWorkspacePath(config.workspaceRoot, String(input.path));
       const content = await readFile(filePath, "utf8");
       const oldText = String(input.oldText);
       if (!oldText || !content.includes(oldText)) throw new Error("oldText was not found");

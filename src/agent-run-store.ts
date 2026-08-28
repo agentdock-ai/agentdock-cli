@@ -15,27 +15,30 @@ export class CliAgentRunStore implements AgentRunStore {
   ) {}
 
   async get(runId: string): Promise<AgentRunRecord | null> {
-    const session = await this.sessions.load(this.sessionId);
+    const session = await this.sessions.loadOrNull(this.sessionId);
+    if (!session) return null;
     const run = session.runs.find((candidate) => candidate.id === runId);
-    return run ? toAgentRun(run, session) : null;
+    return run ? toAgentRun(run, session, this.sessionId) : null;
   }
 
   async save(record: AgentRunRecord): Promise<void> {
-    const session = await this.sessions.load(this.sessionId);
-    const existingIndex = session.runs.findIndex((run) => run.id === record.runId);
-    const cliRun = fromAgentRun(record);
-    if (existingIndex >= 0) session.runs[existingIndex] = cliRun;
-    else session.runs.push(cliRun);
-    await this.sessions.save(session);
+    assertSession(record.sessionId, this.sessionId);
+    await this.sessions.update(this.sessionId, (session) => {
+      if (session.runs.some((run) => run.id === record.runId)) {
+        throw new Error(`CLI run already exists: ${record.runId}`);
+      }
+      session.runs.push(fromAgentRun(record));
+    });
   }
 
   async update(runId: string, update: Partial<AgentRunRecord>): Promise<void> {
-    const session = await this.sessions.load(this.sessionId);
-    const index = session.runs.findIndex((run) => run.id === runId);
-    if (index < 0) throw new Error(`CLI run not found: ${runId}`);
-    const current = toAgentRun(session.runs[index], session);
-    session.runs[index] = fromAgentRun({ ...current, ...update, runId });
-    await this.sessions.save(session);
+    await this.sessions.update(this.sessionId, (session) => {
+      const index = session.runs.findIndex((run) => run.id === runId);
+      if (index < 0) throw new Error(`CLI run not found: ${runId}`);
+      const current = toAgentRun(session.runs[index], session, this.sessionId);
+      assertUpdateIdentity(update, runId, this.sessionId);
+      session.runs[index] = fromAgentRun({ ...current, ...update, runId });
+    });
   }
 
   async transition(
@@ -43,65 +46,63 @@ export class CliAgentRunStore implements AgentRunStore {
     expectedStatus: AgentRunStatus | AgentRunStatus[],
     update: Partial<AgentRunRecord>,
   ): Promise<boolean> {
-    const session = await this.sessions.load(this.sessionId);
-    const index = session.runs.findIndex((run) => run.id === runId);
-    if (index < 0) return false;
+    return this.sessions.update(this.sessionId, (session) => {
+      const index = session.runs.findIndex((run) => run.id === runId);
+      if (index < 0) return false;
 
-    const expected = Array.isArray(expectedStatus) ? expectedStatus : [expectedStatus];
-    const run = session.runs[index];
-    if (!expected.includes(run.status)) return false;
+      const expected = Array.isArray(expectedStatus) ? expectedStatus : [expectedStatus];
+      const run = session.runs[index];
+      if (!expected.includes(run.status)) return false;
 
-    const current = toAgentRun(run, session);
-    session.runs[index] = fromAgentRun({ ...current, ...update, runId });
-    await this.sessions.save(session);
-    return true;
+      const current = toAgentRun(run, session, this.sessionId);
+      assertUpdateIdentity(update, runId, this.sessionId);
+      session.runs[index] = fromAgentRun({ ...current, ...update, runId });
+      return true;
+    });
   }
 
   async claimApprovals(
     runId: string,
     decisions: ToolApprovalDecision[],
   ): Promise<AgentRunApprovalClaim | null> {
-    const session = await this.sessions.load(this.sessionId);
-    const index = session.runs.findIndex((run) => run.id === runId);
-    if (index < 0) return null;
+    return this.sessions.update(this.sessionId, (session) => {
+      const index = session.runs.findIndex((run) => run.id === runId);
+      if (index < 0) return null;
 
-    const run = session.runs[index];
-    const pendingApprovals = run.pendingApprovals ?? [];
-    if (
-      run.status !== "waiting_for_approval"
-      || pendingApprovals.length === 0
-      || pendingApprovals.length !== decisions.length
-    ) {
-      return null;
-    }
+      const run = session.runs[index];
+      const pendingApprovals = run.pendingApprovals ?? [];
+      if (
+        run.status !== "waiting_for_approval" ||
+        !hasExactApprovalSet(pendingApprovals, decisions)
+      ) {
+        return null;
+      }
 
-    const decisionIds = new Set(decisions.map((decision) => decision.approvalId));
-    if (decisionIds.size !== decisions.length || !pendingApprovals.every((approval) => decisionIds.has(approval.approvalId))) {
-      return null;
-    }
+      const approvals = structuredClone(pendingApprovals);
+      run.status = "running";
+      run.pendingApprovals = [];
+      run.updatedAt = new Date().toISOString();
+      run.completedAt = undefined;
 
-    const approvals = structuredClone(pendingApprovals);
-    run.status = "running";
-    run.pendingApprovals = [];
-    run.completedAt = undefined;
-    await this.sessions.save(session);
-
-    return {
-      record: toAgentRun(run, session),
-      approvals,
-    };
+      return { record: toAgentRun(run, session, this.sessionId), approvals };
+    });
   }
 }
 
-function toAgentRun(run: CliRun, session: { messages: AgentRunRecord["messages"] }): AgentRunRecord {
+function toAgentRun(
+  run: CliRun,
+  session: { messages: AgentRunRecord["messages"] },
+  sessionId: string,
+): AgentRunRecord {
   return {
     runId: run.id,
+    sessionId,
     status: run.status,
-    messages: run.messages ?? session.messages,
-    pendingApprovals: run.pendingApprovals ?? [],
+    messages: structuredClone(run.messages ?? session.messages),
+    pendingApprovals: structuredClone(run.pendingApprovals ?? []),
     stepsCompleted: run.stepsCompleted ?? 0,
     createdAt: Date.parse(run.startedAt),
-    updatedAt: Date.parse(run.completedAt ?? run.startedAt),
+    updatedAt: Date.parse(run.updatedAt ?? run.completedAt ?? run.startedAt),
     ...(run.error ? { error: run.error } : {}),
   };
 }
@@ -109,18 +110,57 @@ function toAgentRun(run: CliRun, session: { messages: AgentRunRecord["messages"]
 function fromAgentRun(record: AgentRunRecord): CliRun {
   return {
     id: record.runId,
-    prompt: "",
     startedAt: new Date(record.createdAt).toISOString(),
+    updatedAt: new Date(record.updatedAt).toISOString(),
     completedAt: ["completed", "failed", "cancelled"].includes(record.status)
       ? new Date(record.updatedAt).toISOString()
       : undefined,
     status: record.status,
-    messages: record.messages,
-    pendingApprovals: record.pendingApprovals,
+    messages: structuredClone(record.messages),
+    pendingApprovals: structuredClone(record.pendingApprovals),
     stepsCompleted: record.stepsCompleted,
-    toolCalls: [],
-    toolResults: [],
-    toolErrors: [],
     ...(record.error ? { error: record.error } : {}),
   };
+}
+
+function assertSession(recordSessionId: string, sessionId: string): void {
+  if (recordSessionId !== sessionId) {
+    throw new Error(`CLI run does not belong to session: ${sessionId}`);
+  }
+}
+
+function assertUpdateIdentity(
+  update: Partial<AgentRunRecord>,
+  runId: string,
+  sessionId: string,
+): void {
+  if (update.runId !== undefined && update.runId !== runId) {
+    throw new Error(`CLI run identity is immutable: ${runId}`);
+  }
+  if (update.sessionId !== undefined && update.sessionId !== sessionId) {
+    throw new Error(`CLI run identity is immutable: ${runId}`);
+  }
+}
+
+function hasExactApprovalSet(
+  pendingApprovals: AgentRunRecord["pendingApprovals"],
+  decisions: ToolApprovalDecision[],
+): boolean {
+  if (
+    pendingApprovals.length === 0 ||
+    pendingApprovals.length !== decisions.length ||
+    !decisions.every(
+      (decision) =>
+        typeof decision.approvalId === "string" &&
+        typeof decision.approved === "boolean",
+    )
+  ) {
+    return false;
+  }
+
+  const decisionIds = new Set(decisions.map((decision) => decision.approvalId));
+  return (
+    decisionIds.size === decisions.length &&
+    pendingApprovals.every((approval) => decisionIds.has(approval.approvalId))
+  );
 }

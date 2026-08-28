@@ -1,16 +1,23 @@
 import { loadEnvFile } from "node:process";
+import { mkdir } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
 import { render } from "ink";
 import React from "react";
 import type { AgentRunResult } from "agentdock";
 import { executePrompt, resumeApproval, type ApprovalInput } from "./agent.js";
-import { CliAgentRunStore } from "./agent-run-store.js";
+import { CliAgentStore } from "./agent-store.js";
 import { createLogger } from "./logging/logger.js";
 import { SessionStore } from "./session-store.js";
 import { resolveModelId } from "./model-catalog.js";
 import { ChatApp } from "./ui/components/ChatApp.js";
-import type { ApprovalSubmit, AgentEventUpdate, AgentRunControlUpdate, PromptResult, SubmitPrompt } from "./ui/types.js";
+import type {
+  AgentEventUpdate,
+  AgentRunControlUpdate,
+  ApprovalSubmit,
+  PromptResult,
+  SubmitPrompt,
+} from "./ui/types.js";
 
 try {
   loadEnvFile();
@@ -24,10 +31,12 @@ const logger = createLogger().child({ module: "main" });
 let modelId = resolveModelId(process.env.OPENROUTER_MODEL);
 
 async function runCli(): Promise<void> {
+  await mkdir(workspace, { recursive: true });
   logger.info({ workspace }, "agentdock-cli starting");
   let session = await store.create(workspace);
   await store.save(session);
   logger.info({ sessionId: session.id }, "session created");
+  const createAgentStore = () => new CliAgentStore(store, session.id, workspace);
 
   const runPrompt: SubmitPrompt = async (
     prompt: string,
@@ -50,26 +59,22 @@ async function runCli(): Promise<void> {
       session = await store.create(workspace);
       await store.save(session);
       logger.info({ sessionId: session.id }, "session created from command");
-      return completed(`Started session ${session.id}`);
+      return completed(`Started session ${session.id}`, true, "normal");
     }
 
-    const runStore = new CliAgentRunStore(store, session.id);
     const { result } = await executePrompt(session, prompt, {
       modelId,
       mode: session.mode,
-      runStore,
+      store: createAgentStore(),
       onEvent,
       onRunControl,
       logger,
     });
     session = await store.load(session.id);
-    session.messages = result.messages;
-    await store.save(session);
     return toPromptResult(result);
   };
 
   const approveRun: ApprovalSubmit = async (request, decisions, onEvent, onRunControl) => {
-    const runStore = new CliAgentRunStore(store, session.id);
     const approval: ApprovalInput = {
       runId: findRunId(session, request.approvalId),
       approvals: decisions.map((decision) => ({
@@ -81,14 +86,12 @@ async function runCli(): Promise<void> {
     const { result } = await resumeApproval(session, approval, {
       modelId,
       mode: session.mode,
-      runStore,
+      store: createAgentStore(),
       onEvent,
       onRunControl,
       logger,
     });
     session = await store.load(session.id);
-    session.messages = result.messages;
-    await store.save(session);
     return toPromptResult(result);
   };
 
@@ -100,6 +103,10 @@ async function runCli(): Promise<void> {
         modelId = nextModel;
       }}
       mode={session.mode}
+      onClear={async () => {
+        session.messages = [];
+        await store.save(session);
+      }}
       onToggleMode={async (mode) => {
         session.mode = mode;
         await store.save(session);
@@ -127,8 +134,19 @@ function toPromptResult(result: AgentRunResult): PromptResult {
   };
 }
 
-function completed(content: string): PromptResult {
-  return { content, runId: "", status: "completed", approvalRequests: [] };
+function completed(
+  content: string,
+  resetConversation = false,
+  mode?: "normal" | "approve_all",
+): PromptResult {
+  return {
+    content,
+    runId: "",
+    status: "completed",
+    approvalRequests: [],
+    ...(resetConversation ? { resetConversation: true } : {}),
+    ...(mode ? { mode } : {}),
+  };
 }
 
 function findRunId(session: { runs: Array<{ id: string; pendingApprovals: Array<{ approvalId: string }> }> }, approvalId: string): string {

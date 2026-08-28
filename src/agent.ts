@@ -1,26 +1,27 @@
 import {
   AgentDock,
   AgentEventType,
-  createOpenRouterModel,
+  AgentModelFactory,
+  type AgentStore,
   type AgentContext,
   type AgentEvent,
   type AgentHooks,
   type AgentRunResult,
-  type AgentRunStore,
   type ToolApprovalDecision,
 } from "agentdock";
 import { createToolRegistryFor } from "./tools.js";
+import type { AgentRunControlUpdate } from "./app-types.js";
 import type { AppLogger } from "./logging/logger.js";
 import type { CliSession } from "./session-types.js";
-import type { AgentRunControlUpdate } from "./ui/types.js";
 
 const MAX_AGENT_STEPS = 30;
+const modelFactory = new AgentModelFactory();
 
 export interface PromptOptions {
   modelId: string;
   mode: CliSession["mode"];
   logger: AppLogger;
-  runStore: AgentRunStore;
+  store: AgentStore;
   onEvent?: (event: AgentEvent) => void;
   onRunControl?: AgentRunControlUpdate;
 }
@@ -66,9 +67,12 @@ async function executeStream(
     organizationId: "cli-organization",
   };
   const agent = new AgentDock({
-    model: createOpenRouterModel({ modelId: options.modelId }),
+    model: modelFactory.create({
+      provider: "openrouter",
+      modelId: options.modelId,
+    }),
     registry: createToolRegistryFor({ workspaceRoot: session.workspaceRoot }),
-    runStore: options.runStore,
+    store: options.store,
   });
   const promptStartedAt = Date.now();
   let textChunkCount = 0;
@@ -89,10 +93,15 @@ async function executeStream(
           approvals: approval.approvals,
         },
         context,
-        { permissionMode: options.mode, hooks, maxSteps: MAX_AGENT_STEPS },
+        {
+          sessionId: session.id,
+          permissionMode: options.mode,
+          hooks,
+          maxSteps: MAX_AGENT_STEPS,
+        },
       )
       : await agent.stream(prompt, context, {
-        messages: session.messages,
+        sessionId: session.id,
         permissionMode: options.mode,
         hooks,
         maxSteps: MAX_AGENT_STEPS,
@@ -128,10 +137,11 @@ async function executeStream(
     return { result };
   } catch (error) {
     if (cancelledRunId) {
-      const run = await options.runStore.get(cancelledRunId);
+      const run = await options.store.runs.get(cancelledRunId);
       return {
         result: {
           runId: cancelledRunId,
+          sessionId: session.id,
           status: "cancelled",
           content: "",
           messages: run?.messages ?? session.messages,

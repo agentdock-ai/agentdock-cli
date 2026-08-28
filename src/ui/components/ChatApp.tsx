@@ -14,6 +14,7 @@ interface ChatAppProps {
   onChangeModel: (model: string) => void | Promise<void>;
   mode: "normal" | "approve_all";
   onToggleMode: (mode: "normal" | "approve_all") => void | Promise<void>;
+  onClear: () => void | Promise<void>;
   onSubmit: SubmitPrompt;
   onApproval: ApprovalSubmit;
 }
@@ -24,6 +25,7 @@ export function ChatApp({
   onChangeModel,
   mode,
   onToggleMode,
+  onClear,
   onSubmit,
   onApproval,
 }: ChatAppProps): React.ReactElement {
@@ -75,6 +77,14 @@ export function ChatApp({
 
   const applyResult = useCallback((assistantId: string, streamedContent: string, response: PromptResult | null) => {
     const finalContent = response?.content || streamedContent;
+    if (response?.mode) setActiveMode(response.mode);
+    if (response?.resetConversation) {
+      setMessages(finalContent ? [{ id: assistantId, role: "assistant", content: finalContent }] : []);
+      setPendingApprovals([]);
+      setApprovalDecisions([]);
+      return;
+    }
+
     if (finalContent) updateAssistant(assistantId, finalContent);
     else if (!response?.approvalRequests.length) {
       setMessages((current) => current.filter((message) => message.id !== assistantId));
@@ -174,7 +184,12 @@ export function ChatApp({
       return;
     }
     if (prompt === "/clear") {
-      setMessages([]);
+      try {
+        await onClear();
+        setMessages([]);
+      } catch (error) {
+        setMessages([{ id: crypto.randomUUID(), role: "system", content: error instanceof Error ? error.message : String(error) }]);
+      }
       return;
     }
 
@@ -206,7 +221,7 @@ export function ChatApp({
       setBusy(false);
       setToolActivity([]);
     }
-  }, [applyResult, busy, exit, handleAgentEvent, onSubmit, pendingApproval, updateAssistant]);
+  }, [applyResult, busy, exit, handleAgentEvent, onClear, onSubmit, pendingApproval, updateAssistant]);
 
   const decideApproval = useCallback(async (approved: boolean) => {
     if (!pendingApproval || busy) return;
@@ -261,7 +276,7 @@ export function ChatApp({
       </Box>
       {pendingApproval && !busy && <ApprovalPrompt request={pendingApproval} onDecision={decideApproval} />}
       <Box flexDirection="column" marginTop={1}>
-        {busy && <Spinner busy={busy} toolActivity={toolActivity} />}
+        {busy && <Spinner toolActivity={toolActivity} />}
         <ChatInput
           disabled={busy || Boolean(pendingApproval)}
           selectedModel={activeModel}

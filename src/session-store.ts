@@ -4,11 +4,11 @@ import { randomUUID } from "node:crypto";
 import type { CliSession } from "./session-types.js";
 
 export class SessionStore {
-  private saveQueue: Promise<void> = Promise.resolve();
+  private readonly queues = new Map<string, Promise<unknown>>();
 
   constructor(private readonly directory: string) {}
 
-  async create(workspaceRoot: string): Promise<CliSession> {
+  create(workspaceRoot: string): CliSession {
     const now = new Date().toISOString();
     return {
       version: 1,
@@ -23,39 +23,37 @@ export class SessionStore {
   }
 
   async load(id: string): Promise<CliSession> {
-    const content = await readFile(this.filePath(id), "utf8");
-    const session = JSON.parse(content) as CliSession;
-    if (session.version !== 1 || session.id !== id) {
-      throw new Error(`Invalid session file: ${id}`);
+    await this.waitForPending(id);
+    return this.read(id);
+  }
+
+  async loadOrNull(id: string): Promise<CliSession | null> {
+    try {
+      return await this.load(id);
+    } catch (error) {
+      if (isFileNotFound(error)) return null;
+      throw error;
     }
-    session.mode ??= "normal";
-    for (const run of session.runs) {
-      run.messages ??= session.messages;
-      run.pendingApprovals ??= [];
-      run.stepsCompleted ??= 0;
-    }
-    return session;
   }
 
   save(session: CliSession): Promise<void> {
-    const operation = this.saveQueue.then(async () => {
-      await mkdir(this.directory, { recursive: true });
-      session.updatedAt = new Date().toISOString();
-      const target = this.filePath(session.id);
-      const temporary = `${target}.${process.pid}.${randomUUID()}.tmp`;
-
-      try {
-        await writeFile(temporary, `${JSON.stringify(session, null, 2)}\n`, "utf8");
-        await rename(temporary, target);
-      } finally {
-        await rm(temporary, { force: true }).catch(() => undefined);
-      }
+    const snapshot = structuredClone(session);
+    return this.enqueue(session.id, async () => {
+      snapshot.updatedAt = new Date().toISOString();
+      await this.write(snapshot);
     });
+  }
 
-    // Keep the queue usable after a failed write while still returning the
-    // original error to the caller that initiated it.
-    this.saveQueue = operation.catch(() => undefined);
-    return operation;
+  update<T>(
+    id: string,
+    updater: (session: CliSession) => T | Promise<T>,
+  ): Promise<T> {
+    return this.enqueue(id, async () => {
+      const session = await this.read(id);
+      const result = await updater(session);
+      await this.write(session);
+      return result;
+    });
   }
 
   async list(): Promise<CliSession[]> {
@@ -64,11 +62,8 @@ export class SessionStore {
     const sessions: CliSession[] = [];
     for (const entry of entries) {
       if (!entry.isFile() || !entry.name.endsWith(".json")) continue;
-      try {
-        sessions.push(await this.load(entry.name.slice(0, -5)));
-      } catch {
-        // Ignore incomplete or invalid files when listing sessions.
-      }
+      const session = await this.loadOrNull(entry.name.slice(0, -5));
+      if (session) sessions.push(session);
     }
     return sessions.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
   }
@@ -77,4 +72,81 @@ export class SessionStore {
     if (!/^[a-zA-Z0-9-]+$/.test(id)) throw new Error("Invalid session id");
     return path.join(this.directory, `${id}.json`);
   }
+
+  private async read(id: string): Promise<CliSession> {
+    const content = await readFile(this.filePath(id), "utf8");
+    let value: unknown;
+    try {
+      value = JSON.parse(content);
+    } catch {
+      throw new Error(`Invalid session JSON: ${id}`);
+    }
+
+    if (!isRecord(value) || value.version !== 1 || value.id !== id) {
+      throw new Error(`Invalid session file: ${id}`);
+    }
+    if (
+      typeof value.workspaceRoot !== "string" ||
+      typeof value.createdAt !== "string" ||
+      typeof value.updatedAt !== "string" ||
+      !Array.isArray(value.messages) ||
+      !Array.isArray(value.runs)
+    ) {
+      throw new Error(`Invalid session shape: ${id}`);
+    }
+    if (value.mode !== undefined && value.mode !== "normal" && value.mode !== "approve_all") {
+      throw new Error(`Invalid session mode: ${id}`);
+    }
+
+    const session = value as unknown as CliSession;
+    session.mode ??= "normal";
+    for (const run of session.runs) {
+      if (!isRecord(run)) throw new Error(`Invalid run in session: ${id}`);
+      run.messages ??= session.messages;
+      run.pendingApprovals ??= [];
+      run.stepsCompleted ??= 0;
+      run.updatedAt ??= run.completedAt ?? run.startedAt;
+    }
+    return session;
+  }
+
+  private async write(session: CliSession): Promise<void> {
+    await mkdir(this.directory, { recursive: true });
+    const target = this.filePath(session.id);
+    const temporary = `${target}.${process.pid}.${randomUUID()}.tmp`;
+
+    try {
+      await writeFile(temporary, `${JSON.stringify(session, null, 2)}\n`, "utf8");
+      await rename(temporary, target);
+    } finally {
+      await rm(temporary, { force: true }).catch(() => undefined);
+    }
+  }
+
+  private async waitForPending(id: string): Promise<void> {
+    await this.queues.get(id)?.catch(() => undefined);
+  }
+
+  private enqueue<T>(id: string, operation: () => Promise<T>): Promise<T> {
+    const previous = this.queues.get(id) ?? Promise.resolve();
+    const queued = previous.catch(() => undefined).then(operation);
+    this.queues.set(id, queued);
+    queued.then(
+      () => this.clearQueue(id, queued),
+      () => this.clearQueue(id, queued),
+    );
+    return queued;
+  }
+
+  private clearQueue(id: string, queued: Promise<unknown>): void {
+    if (this.queues.get(id) === queued) this.queues.delete(id);
+  }
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
+
+function isFileNotFound(error: unknown): boolean {
+  return isRecord(error) && error.code === "ENOENT";
 }
