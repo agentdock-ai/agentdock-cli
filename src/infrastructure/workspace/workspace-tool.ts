@@ -40,8 +40,13 @@ export class ReadFileTool extends WorkspaceTool {
 
 export class ListFilesTool extends WorkspaceTool {
   readonly name = "list_files";
-  readonly description = "List files inside the workspace, excluding dependencies and git metadata.";
-  readonly parameters = { type: "object", properties: {}, required: [] };
+  readonly description = "Return the complete recursive file tree of the current workspace. Directories include nested children; files include their relative paths. Symbolic links are excluded.";
+  readonly parameters = {
+    type: "object",
+    properties: {},
+    required: [],
+    additionalProperties: false,
+  };
 
   protected run(): Promise<unknown> {
     return this.files.list();

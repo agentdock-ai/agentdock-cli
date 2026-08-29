@@ -28,9 +28,7 @@ export class CliApplication {
   private readonly commands: CommandDispatcher;
 
   constructor(environment: NodeJS.ProcessEnv = process.env) {
-    this.defaultWorkspace = environment.AGENTDOCK_DEV === "true"
-      ? path.resolve(process.cwd(), ".sandbox")
-      : process.cwd();
+    this.defaultWorkspace = path.resolve(environment.AGENTDOCK_WORKSPACE?.trim() || process.cwd());
     this.store = new SessionStore(path.resolve(this.defaultWorkspace, ".agentdock", "sessions"));
     this.logger = createLogger().child({ module: "main" });
     this.sessions = new SessionController(this.store, this.defaultWorkspace);

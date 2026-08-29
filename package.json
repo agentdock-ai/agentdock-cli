@@ -19,7 +19,7 @@
     "prompts/SYSTEM_PROMPT.md"
   ],
   "scripts": {
-    "dev": "AGENTDOCK_DEV=true tsx src/main.tsx",
+    "dev": "AGENTDOCK_WORKSPACE=.sandbox tsx src/main.tsx",
     "start": "node dist/main.js",
     "build": "node scripts/clean-dist.mjs && tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",

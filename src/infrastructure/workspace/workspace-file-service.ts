@@ -1,15 +1,16 @@
-import { mkdir, readFile, readdir, stat, writeFile } from "node:fs/promises";
+import { mkdir, readFile, realpath, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { WorkspacePathResolver } from "./path-resolver.js";
-
-export const MAX_FILE_BYTES = 256 * 1024;
-export const MAX_WORKSPACE_FILES = 10_000;
-export const PROTECTED_DIRECTORIES = new Set([".agentdock", ".git", "node_modules"]);
+import { MAX_FILE_BYTES } from "./workspace-policy.js";
+import { WorkspaceTreeBuilder, type WorkspaceFileTree } from "./workspace-tree-builder.js";
 
 export class WorkspaceFileService {
+  private workspaceRootPath: Promise<string> | null = null;
+
   constructor(
     private readonly workspaceRoot: string,
     private readonly pathResolver = new WorkspacePathResolver(),
+    private readonly treeBuilder = new WorkspaceTreeBuilder(workspaceRoot),
   ) {}
 
   async read(relativePath: string): Promise<{ path: string; content: string }> {
@@ -17,18 +18,19 @@ export class WorkspaceFileService {
     const info = await stat(filePath);
     this.assertSize(info.size);
     return {
-      path: path.relative(this.workspaceRoot, filePath),
+      path: await this.relativePath(filePath),
       content: await readFile(filePath, "utf8"),
     };
   }
 
-  async list(): Promise<{ files: string[] }> {
-    return { files: await this.filesUnder(this.workspaceRoot) };
+  async list(): Promise<WorkspaceFileTree> {
+    return this.treeBuilder.build();
   }
 
   async search(query: string): Promise<{ query: string; matches: string[] }> {
     const matches: string[] = [];
-    for (const relativePath of await this.filesUnder(this.workspaceRoot)) {
+    const tree = await this.treeBuilder.build();
+    for (const relativePath of this.treeBuilder.filePaths(tree)) {
       const filePath = await this.resolve(relativePath);
       const info = await stat(filePath);
       if (info.size > MAX_FILE_BYTES) continue;
@@ -42,7 +44,7 @@ export class WorkspaceFileService {
     this.assertSize(Buffer.byteLength(content, "utf8"));
     await mkdir(path.dirname(filePath), { recursive: true });
     await writeFile(filePath, content, "utf8");
-    return { path: path.relative(this.workspaceRoot, filePath), bytes: Buffer.byteLength(content, "utf8") };
+    return { path: await this.relativePath(filePath), bytes: Buffer.byteLength(content, "utf8") };
   }
 
   async update(relativePath: string, oldText: string, newText: string): Promise<{ path: string; replacements: number }> {
@@ -54,30 +56,20 @@ export class WorkspaceFileService {
     const updated = content.replace(oldText, newText);
     this.assertSize(Buffer.byteLength(updated, "utf8"));
     await writeFile(filePath, updated, "utf8");
-    return { path: path.relative(this.workspaceRoot, filePath), replacements: 1 };
+    return { path: await this.relativePath(filePath), replacements: 1 };
   }
 
   private async resolve(relativePath: string): Promise<string> {
-    return this.pathResolver.resolve(this.workspaceRoot, relativePath, PROTECTED_DIRECTORIES);
+    return this.pathResolver.resolve(this.workspaceRoot, relativePath);
+  }
+
+  private async relativePath(filePath: string): Promise<string> {
+    this.workspaceRootPath ??= realpath(this.workspaceRoot);
+    return path.relative(await this.workspaceRootPath, filePath);
   }
 
   private assertSize(bytes: number): void {
     if (bytes > MAX_FILE_BYTES) throw new Error("File exceeds the size limit");
   }
 
-  private async filesUnder(root: string, prefix = "", state = { count: 0 }): Promise<string[]> {
-    const entries = await readdir(root, { withFileTypes: true });
-    const files: string[] = [];
-    for (const entry of entries) {
-      if (PROTECTED_DIRECTORIES.has(entry.name) || entry.isSymbolicLink()) continue;
-      const relative = path.join(prefix, entry.name);
-      if (entry.isDirectory()) files.push(...await this.filesUnder(path.join(root, entry.name), relative, state));
-      else {
-        state.count += 1;
-        if (state.count > MAX_WORKSPACE_FILES) throw new Error(`Workspace contains more than ${MAX_WORKSPACE_FILES} files`);
-        files.push(relative);
-      }
-    }
-    return files;
-  }
 }
