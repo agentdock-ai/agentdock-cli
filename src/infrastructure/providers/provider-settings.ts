@@ -1,4 +1,5 @@
-import type { AgentModelConfig } from "agentdock";
+import { AgentDockModel } from "@agentdock/models";
+import type { BaseChatModel } from "@langchain/core/language_models/chat_models";
 import { defaultModelId, type ModelDefinition, modelCatalog } from "../../domain/models/model-catalog.js";
 
 export const supportedProviders = ["openrouter", "ollama"] as const;
@@ -11,7 +12,6 @@ export interface ProviderSettings {
   provider: CliProvider;
   modelId: string;
   openrouterApiKey?: string;
-  ollamaApiKey?: string;
   ollamaBaseUrl: string;
 }
 
@@ -25,9 +25,6 @@ export class ProviderSettingsService {
         : environment.OLLAMA_MODEL?.trim() || defaultOllamaModelId,
       ...(environment.OPENROUTER_API_KEY?.trim()
         ? { openrouterApiKey: environment.OPENROUTER_API_KEY.trim() }
-        : {}),
-      ...(environment.OLLAMA_API_KEY?.trim()
-        ? { ollamaApiKey: environment.OLLAMA_API_KEY.trim() }
         : {}),
       ollamaBaseUrl: this.normalizeBaseUrl(environment.OLLAMA_BASE_URL || defaultOllamaBaseUrl),
     };
@@ -51,21 +48,15 @@ export class ProviderSettingsService {
     };
   }
 
-  toAgentConfig(settings: ProviderSettings): AgentModelConfig {
+  createModel(settings: ProviderSettings): BaseChatModel {
     if (settings.provider === "openrouter") {
-      return {
-        provider: "openrouter",
-        modelId: settings.modelId,
+      return AgentDockModel.openRouter({
+        model: settings.modelId,
         ...(settings.openrouterApiKey ? { apiKey: settings.openrouterApiKey } : {}),
-      };
+      });
     }
 
-    return {
-      provider: "ollama",
-      modelId: settings.modelId,
-      baseURL: settings.ollamaBaseUrl,
-      ...(settings.ollamaApiKey ? { apiKey: settings.ollamaApiKey } : {}),
-    };
+    return AgentDockModel.ollama({ model: settings.modelId, baseUrl: settings.ollamaBaseUrl });
   }
 
   async listModels(settings: ProviderSettings): Promise<ModelDefinition[]> {
@@ -127,8 +118,8 @@ export function switchProvider(settings: ProviderSettings, provider: CliProvider
   return defaultService.switch(settings, provider);
 }
 
-export function toAgentModelConfig(settings: ProviderSettings): AgentModelConfig {
-  return defaultService.toAgentConfig(settings);
+export function createProviderModel(settings: ProviderSettings): BaseChatModel {
+  return defaultService.createModel(settings);
 }
 
 export function listProviderModels(settings: ProviderSettings): Promise<ModelDefinition[]> {

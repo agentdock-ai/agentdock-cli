@@ -1,7 +1,7 @@
 import { mkdir } from "node:fs/promises";
 import type { AgentRunResult } from "agentdock";
 import { SessionStore } from "../infrastructure/persistence/session-store.js";
-import type { CliSession, SessionSummary } from "../domain/sessions/session-types.js";
+import type { CliRun, CliSession, SessionSummary } from "../domain/sessions/session-types.js";
 
 export class SessionController {
   private activeSession: CliSession | null = null;
@@ -42,6 +42,34 @@ export class SessionController {
     return this.current;
   }
 
+  async recordRun(result: AgentRunResult): Promise<void> {
+    const now = new Date().toISOString();
+    await this.store.update(this.current.id, (session) => {
+      const existingIndex = session.runs.findIndex((run) => run.id === result.runId);
+      const existing = existingIndex >= 0 ? session.runs[existingIndex] : undefined;
+      const messages = result.messages.length > 0
+        ? structuredClone(result.messages)
+        : structuredClone(session.messages);
+      const run: CliRun = {
+        id: result.runId,
+        startedAt: existing?.startedAt ?? now,
+        updatedAt: now,
+        status: result.status,
+        messages,
+        pendingApprovals: structuredClone(result.approvalRequests),
+        stepsCompleted: result.stepsCompleted,
+        ...(isTerminal(result.status) ? { completedAt: now } : {}),
+        ...(result.error ? { error: result.error } : {}),
+      };
+
+      if (existingIndex >= 0) session.runs[existingIndex] = run;
+      else session.runs.push(run);
+      session.latestRunId = result.runId;
+      session.messages = structuredClone(messages);
+    });
+    await this.refresh();
+  }
+
   async clearMessages(): Promise<void> {
     this.current.messages = [];
     await this.store.save(this.current);
@@ -77,4 +105,8 @@ export class SessionController {
     });
     return this.store.load(sessionId);
   }
+}
+
+function isTerminal(status: AgentRunResult["status"]): boolean {
+  return status === "completed" || status === "failed" || status === "cancelled";
 }

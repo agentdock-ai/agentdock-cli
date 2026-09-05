@@ -18,7 +18,6 @@ AgentDock CLI provides a local interactive environment for testing agents, tools
 - **Interactive Agent Sessions:** Run prompts continuously in a local REPL.
 - **Session Persistence:** Save, inspect, and resume sessions.
 - **Workspace Tools:** Read, search, list, write, and update files inside a workspace.
-- **Workspace File Tools:** Execute approved file operations inside the workspace.
 - **TypeScript First:** Fully typed and built for Node.js applications.
 
 ## 🚀 Setup
@@ -67,7 +66,9 @@ yarn start
 
 Once running, enter prompts continuously. Use `/help` for interactive commands. Use `/model` or `/models` to browse and select a model; the selected model is shown in the header.
 
-Sessions are stored under `.agentdock/sessions/` in the directory where the CLI is launched.
+Sessions are stored under `.agentdock/sessions/`, and LangGraph checkpoints are stored under
+`.agentdock/checkpoints.json` in the directory where the CLI is launched. Checkpoints allow
+approval requests to resume through the AgentDock runtime instead of a CLI-specific run store.
 
 Resume a saved session from the command line:
 

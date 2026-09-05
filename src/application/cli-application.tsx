@@ -5,8 +5,8 @@ import { AgentRunner, type ApprovalInput } from "./agent-runner.js";
 import { CommandDispatcher } from "./command-dispatcher.js";
 import { ProviderController } from "./provider-controller.js";
 import { SessionController } from "./session-controller.js";
-import { CliAgentStore } from "../infrastructure/agents/cli-agent-store.js";
 import { createLogger, type AppLogger } from "../infrastructure/logging/logger.js";
+import { FileCheckpointSaver } from "../infrastructure/persistence/file-checkpoint-saver.js";
 import { SessionStore } from "../infrastructure/persistence/session-store.js";
 import { ChatApp } from "../ui/components/ChatApp.js";
 import type { CliOptions } from "../config/cli-options.js";
@@ -33,7 +33,9 @@ export class CliApplication {
     this.logger = createLogger().child({ module: "main" });
     this.sessions = new SessionController(this.store, this.defaultWorkspace);
     this.providers = new ProviderController(undefined, environment);
-    this.agentRunner = new AgentRunner();
+    this.agentRunner = new AgentRunner(
+      new FileCheckpointSaver(path.resolve(this.defaultWorkspace, ".agentdock", "checkpoints.json")),
+    );
     this.commands = new CommandDispatcher(this.sessions, this.providers);
   }
 
@@ -88,12 +90,11 @@ export class CliApplication {
     const { result } = await this.agentRunner.executePrompt(this.sessions.current, prompt, {
       mode: this.sessions.current.mode,
       providerSettings: this.providers.current,
-      store: this.createAgentStore(),
       onEvent,
       onRunControl,
       logger: this.logger,
     });
-    await this.sessions.refresh();
+    await this.sessions.recordRun(result);
     return this.toPromptResult(result);
   };
 
@@ -108,30 +109,21 @@ export class CliApplication {
       approvals: decisions.map((decision) => ({
         approvalId: decision.approvalId,
         approved: decision.approved,
-        reason: decision.approved ? "Approved in AgentDock CLI" : "Denied in AgentDock CLI",
+        ...(!decision.approved ? { reason: "Denied in AgentDock CLI" } : {}),
       })),
     };
     const { result } = await this.agentRunner.resumeApproval(this.sessions.current, approval, {
       mode: this.sessions.current.mode,
       providerSettings: this.providers.current,
-      store: this.createAgentStore(),
       onEvent,
       onRunControl,
       logger: this.logger,
     });
-    await this.sessions.refresh();
+    await this.sessions.recordRun(result);
     return this.toPromptResult(result);
   };
 
-  private createAgentStore(): CliAgentStore {
-    const session = this.sessions.current;
-    return new CliAgentStore(this.store, session.id, session.workspaceRoot);
-  }
-
   private toPromptResult(result: AgentRunResult): PromptResult {
-    if (result.status === "running") {
-      throw new Error(`Agent run did not reach a terminal state: ${result.runId}`);
-    }
     return {
       content: result.content,
       runId: result.runId,

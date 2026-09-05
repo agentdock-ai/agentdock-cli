@@ -10,10 +10,9 @@ export class CommandFormatter {
       `- model: ${settings.modelId}`,
       `- OpenRouter API key: ${settings.openrouterApiKey ? "configured" : "not configured"}`,
       `- Ollama URL: ${settings.ollamaBaseUrl}`,
-      `- Ollama API key: ${settings.ollamaApiKey ? "configured" : "not configured"}`,
       "",
       "Change provider with /provider openrouter or /provider ollama.",
-      "Set credentials and URLs with OPENROUTER_API_KEY, OLLAMA_API_KEY, and OLLAMA_BASE_URL.",
+      "Set credentials and URLs with OPENROUTER_API_KEY and OLLAMA_BASE_URL.",
     ].join("\n");
   }
 

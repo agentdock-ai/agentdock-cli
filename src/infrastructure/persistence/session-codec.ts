@@ -2,14 +2,12 @@ import type {
   AgentRunStatus,
   Message,
   ToolApprovalRequest,
-  ToolApprovalResponse,
   ToolCallRecord,
   ToolResultRecord,
 } from "agentdock";
 import type { CliRun, CliSession } from "../../domain/sessions/session-types.js";
 
 const runStatuses = new Set<string>([
-  "running",
   "waiting_for_approval",
   "completed",
   "failed",
@@ -18,8 +16,6 @@ const runStatuses = new Set<string>([
 
 interface MessageMetadata {
   id?: string;
-  active?: boolean;
-  compacted?: boolean;
 }
 
 export class SessionCodec {
@@ -118,46 +114,30 @@ export class SessionCodec {
     }
     if (value.role === "assistant") {
       const toolCalls = value.toolCalls === undefined ? undefined : this.readToolCalls(value.toolCalls, sessionId);
-      const approvalRequests = value.approvalRequests === undefined
-        ? undefined
-        : this.readApprovalRequests(value.approvalRequests, sessionId);
       return {
         role: "assistant",
         content: value.content,
         ...metadata,
         ...(toolCalls ? { toolCalls } : {}),
-        ...(approvalRequests ? { approvalRequests } : {}),
       };
     }
     if (value.role === "tool") {
       const toolResults = this.readToolResults(value.toolResults, sessionId);
-      const approvalResponses = value.approvalResponses === undefined
-        ? undefined
-        : this.readApprovalResponses(value.approvalResponses, sessionId);
       return {
         role: "tool",
         content: value.content,
         toolResults,
         ...metadata,
-        ...(approvalResponses ? { approvalResponses } : {}),
       };
     }
     throw new Error(`Invalid message role at ${field}: ${sessionId}`);
   }
 
   private readMetadata(value: Record<string, unknown>, field: string, sessionId: string): MessageMetadata {
-    for (const key of ["id", "active", "compacted"] as const) {
-      const item = value[key];
-      const expectedType = key === "id" ? "string" : "boolean";
-      if (item !== undefined && typeof item !== expectedType) {
-        throw new Error(`Invalid message ${key} at ${field}: ${sessionId}`);
-      }
+    if (value.id !== undefined && typeof value.id !== "string") {
+      throw new Error(`Invalid message id at ${field}: ${sessionId}`);
     }
-    return {
-      ...(typeof value.id === "string" ? { id: value.id } : {}),
-      ...(typeof value.active === "boolean" ? { active: value.active } : {}),
-      ...(typeof value.compacted === "boolean" ? { compacted: value.compacted } : {}),
-    };
+    return typeof value.id === "string" ? { id: value.id } : {};
   }
 
   private readToolCalls(value: unknown, sessionId: string): ToolCallRecord[] {
@@ -169,6 +149,7 @@ export class SessionCodec {
     if (!isRecord(value) || typeof value.toolCallId !== "string" || typeof value.name !== "string") {
       throw new Error(`Invalid tool call: ${sessionId}`);
     }
+    if (!isRecord(value.input)) throw new Error(`Invalid tool call input: ${sessionId}`);
     return { toolCallId: value.toolCallId, name: value.name, input: value.input };
   }
 
@@ -181,6 +162,7 @@ export class SessionCodec {
       if (candidate.isError !== undefined && typeof candidate.isError !== "boolean") {
         throw new Error(`Invalid tool result error flag: ${sessionId}`);
       }
+      if (!isRecord(candidate.input)) throw new Error(`Invalid tool result input: ${sessionId}`);
       return {
         toolCallId: candidate.toolCallId,
         name: candidate.name,
@@ -198,24 +180,6 @@ export class SessionCodec {
         throw new Error(`Invalid approval request: ${sessionId}`);
       }
       return { approvalId: candidate.approvalId, toolCall: this.readToolCall(candidate.toolCall, sessionId) };
-    });
-  }
-
-  private readApprovalResponses(value: unknown, sessionId: string): ToolApprovalResponse[] {
-    if (!Array.isArray(value)) throw new Error(`Invalid approval responses: ${sessionId}`);
-    return value.map((candidate) => {
-      if (!isRecord(candidate) || typeof candidate.approvalId !== "string" || typeof candidate.approved !== "boolean") {
-        throw new Error(`Invalid approval response: ${sessionId}`);
-      }
-      if (candidate.reason !== undefined && typeof candidate.reason !== "string") {
-        throw new Error(`Invalid approval response reason: ${sessionId}`);
-      }
-      return {
-        approvalId: candidate.approvalId,
-        approved: candidate.approved,
-        ...(typeof candidate.reason === "string" ? { reason: candidate.reason } : {}),
-        toolCall: this.readToolCall(candidate.toolCall, sessionId),
-      };
     });
   }
 

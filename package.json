@@ -27,6 +27,9 @@
     "logs:clear": "node scripts/clear-logs.mjs"
   },
   "dependencies": {
+    "@agentdock/models": "link:../agentdock/packages/models",
+    "@langchain/core": "^1.2.9",
+    "@langchain/langgraph-checkpoint": "^1.1.5",
     "agentdock": "link:../agentdock",
     "ink": "^7.1.1",
     "pino": "^10.3.1",

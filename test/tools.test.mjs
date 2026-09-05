@@ -48,3 +48,14 @@ test("workspace tools list and read the complete workspace tree", async () => {
     directoryCount: 3,
   });
 });
+
+test("workspace write tools require approval only in normal mode", () => {
+  const workspace = os.tmpdir();
+  const normal = new WorkspaceToolFactory().create(workspace, "normal");
+  const approveAll = new WorkspaceToolFactory().create(workspace, "approve_all");
+
+  assert.equal(normal.get("write_file")?.requiresApproval, true);
+  assert.equal(normal.get("update_file")?.requiresApproval, true);
+  assert.equal(approveAll.get("write_file")?.requiresApproval, undefined);
+  assert.equal(approveAll.get("update_file")?.requiresApproval, undefined);
+});

@@ -4,13 +4,17 @@ import type { WorkspaceFileService } from "./workspace-file-service.js";
 export abstract class WorkspaceTool implements Tool {
   readonly execute: (input: ToolExecuteInput) => Promise<unknown>;
 
-  constructor(protected readonly files: WorkspaceFileService) {
+  constructor(
+    protected readonly files: WorkspaceFileService,
+    requiresApproval = false,
+  ) {
     this.execute = (input) => this.run(input);
+    if (requiresApproval) this.requiresApproval = true;
   }
 
   abstract readonly name: string;
   abstract readonly description: string;
-  abstract readonly parameters: Record<string, unknown>;
+  abstract readonly parameters: Tool["parameters"];
   readonly requiresApproval?: boolean;
 
   protected abstract run(input: ToolExecuteInput): Promise<unknown>;
@@ -31,7 +35,7 @@ export class ReadFileTool extends WorkspaceTool {
     type: "object",
     properties: { path: { type: "string" } },
     required: ["path"],
-  };
+  } as const;
 
   protected run({ input }: ToolExecuteInput): Promise<unknown> {
     return this.files.read(this.requiredString(input, "path"));
@@ -46,7 +50,7 @@ export class ListFilesTool extends WorkspaceTool {
     properties: {},
     required: [],
     additionalProperties: false,
-  };
+  } as const;
 
   protected run(): Promise<unknown> {
     return this.files.list();
@@ -60,7 +64,7 @@ export class SearchFilesTool extends WorkspaceTool {
     type: "object",
     properties: { query: { type: "string" } },
     required: ["query"],
-  };
+  } as const;
 
   protected run({ input }: ToolExecuteInput): Promise<unknown> {
     return this.files.search(this.requiredString(input, "query"));
@@ -70,12 +74,11 @@ export class SearchFilesTool extends WorkspaceTool {
 export class WriteFileTool extends WorkspaceTool {
   readonly name = "write_file";
   readonly description = "Create or replace a UTF-8 text file.";
-  readonly requiresApproval = true;
   readonly parameters = {
     type: "object",
     properties: { path: { type: "string" }, content: { type: "string" } },
     required: ["path", "content"],
-  };
+  } as const;
 
   protected run({ input }: ToolExecuteInput): Promise<unknown> {
     return this.files.write(
@@ -88,7 +91,6 @@ export class WriteFileTool extends WorkspaceTool {
 export class UpdateFileTool extends WorkspaceTool {
   readonly name = "update_file";
   readonly description = "Replace an exact text fragment in a UTF-8 file.";
-  readonly requiresApproval = true;
   readonly parameters = {
     type: "object",
     properties: {
@@ -97,7 +99,7 @@ export class UpdateFileTool extends WorkspaceTool {
       newText: { type: "string" },
     },
     required: ["path", "oldText", "newText"],
-  };
+  } as const;
 
   protected run({ input }: ToolExecuteInput): Promise<unknown> {
     return this.files.update(

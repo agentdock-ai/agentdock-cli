@@ -38,15 +38,15 @@ export class ChatEventController {
       return;
     }
 
-    if (event.type === AgentEventType.ToolError || event.type === AgentEventType.ToolOutputDenied) {
+    if (event.type === AgentEventType.ToolError) {
       callbacks.updateMessages((current) => this.upsertToolMessage(current, assistantId, {
-        toolCallId: event.toolCall.toolCallId,
-        toolName: event.toolCall.name,
-        toolInput: event.toolCall.input,
+        toolCallId: event.error.toolCallId,
+        toolName: event.error.name,
+        toolInput: event.error.input,
         toolState: "error",
-        toolError: event.type === AgentEventType.ToolError ? event.error.message : "Tool output denied",
+        toolError: event.error.error,
       }));
-      callbacks.updateToolActivity((current) => this.setToolActivity(current, event.toolCall.name, "error"));
+      callbacks.updateToolActivity((current) => this.setToolActivity(current, event.error.name, "error"));
       return;
     }
 
@@ -66,12 +66,20 @@ export class ChatEventController {
 
     if (event.type === AgentEventType.ApprovalResolved) {
       callbacks.updateMessages((current) => event.approvals.reduce(
-        (messages, approval) => this.upsertToolMessage(messages, assistantId, {
-          toolCallId: approval.toolCall.toolCallId,
-          toolName: approval.toolCall.name,
-          toolInput: approval.toolCall.input,
-          toolState: "running",
-        }),
+        (messages, approval) => this.upsertToolMessage(messages, assistantId, approval.approved
+          ? {
+            toolCallId: approval.toolCall.toolCallId,
+            toolName: approval.toolCall.name,
+            toolInput: approval.toolCall.input,
+            toolState: "running",
+          }
+          : {
+            toolCallId: approval.toolCall.toolCallId,
+            toolName: approval.toolCall.name,
+            toolInput: approval.toolCall.input,
+            toolState: "error",
+            toolError: approval.reason ?? "Tool approval denied",
+          }),
         current,
       ));
     }

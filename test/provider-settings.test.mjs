@@ -3,9 +3,9 @@ import { test } from "node:test";
 import {
   defaultOllamaBaseUrl,
   defaultOllamaModelId,
+  createProviderModel,
   listProviderModels,
   loadProviderSettings,
-  toAgentModelConfig,
 } from "../dist/infrastructure/providers/provider-settings.js";
 
 test("provider settings use safe OpenRouter defaults", () => {
@@ -14,10 +14,6 @@ test("provider settings use safe OpenRouter defaults", () => {
   assert.equal(settings.provider, "openrouter");
   assert.equal(settings.modelId, "google/gemini-2.5-flash");
   assert.equal(settings.ollamaBaseUrl, defaultOllamaBaseUrl);
-  assert.deepEqual(toAgentModelConfig(settings), {
-    provider: "openrouter",
-    modelId: "google/gemini-2.5-flash",
-  });
 });
 
 test("provider settings configure Ollama and list local models", async () => {
@@ -30,11 +26,7 @@ test("provider settings configure Ollama and list local models", async () => {
   assert.equal(settings.provider, "ollama");
   assert.equal(settings.modelId, "qwen2.5");
   assert.equal(settings.ollamaBaseUrl, "http://localhost:11434");
-  assert.deepEqual(toAgentModelConfig(settings), {
-    provider: "ollama",
-    modelId: "qwen2.5",
-    baseURL: "http://localhost:11434",
-  });
+  assert.equal(createProviderModel(settings).constructor.name, "ChatOllama");
 
   const originalFetch = globalThis.fetch;
   globalThis.fetch = async (input) => {
@@ -53,6 +45,11 @@ test("provider settings configure Ollama and list local models", async () => {
   } finally {
     globalThis.fetch = originalFetch;
   }
+});
+
+test("provider settings create an OpenRouter chat model", () => {
+  const settings = loadProviderSettings({ OPENROUTER_API_KEY: "test-key" });
+  assert.equal(createProviderModel(settings).constructor.name, "ChatOpenRouter");
 });
 
 test("provider settings use the Ollama model default", () => {
