@@ -21,6 +21,54 @@ test("SessionCodec rejects malformed nested message data", () => {
   );
 });
 
+test("SessionCodec migrates string messages and legacy tool records", () => {
+  const timestamp = new Date().toISOString();
+  const session = {
+    version: 1,
+    id: "session-legacy",
+    workspaceRoot: "/tmp/workspace",
+    createdAt: timestamp,
+    updatedAt: timestamp,
+    messages: [
+      { role: "user", content: "hello" },
+      {
+        role: "assistant",
+        content: "",
+        toolCalls: [
+          {
+            toolCallId: "call-1",
+            name: "read_file",
+            input: { path: "README.md" },
+          },
+        ],
+      },
+      {
+        role: "tool",
+        content: "",
+        toolResults: [
+          {
+            toolCallId: "call-1",
+            name: "read_file",
+            input: { path: "README.md" },
+            output: "contents",
+          },
+        ],
+      },
+    ],
+    runs: [],
+  };
+
+  const decoded = new SessionCodec().decode(
+    JSON.stringify(session),
+    "session-legacy",
+  );
+  assert.deepEqual(decoded.messages[0].content, [
+    { type: "text", text: "hello" },
+  ]);
+  assert.equal(decoded.messages[1].content[0].type, "tool-call");
+  assert.equal(decoded.messages[2].content[0].type, "tool-result");
+});
+
 test("SystemPromptLoader loads a non-empty prompt", async () => {
   const prompt = await new SystemPromptLoader().load();
   assert.match(prompt, /You are AgentDock/);

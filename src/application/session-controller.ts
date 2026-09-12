@@ -1,5 +1,5 @@
 import { mkdir } from "node:fs/promises";
-import type { AgentRunResult } from "agentdock";
+import type { AgentRunResult } from "@agentdock-ai/agentdock";
 import { SessionStore } from "../infrastructure/persistence/session-store.js";
 import type { CliRun, CliSession, SessionSummary } from "../domain/sessions/session-types.js";
 

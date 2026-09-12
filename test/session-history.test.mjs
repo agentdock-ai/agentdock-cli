@@ -5,11 +5,11 @@ import { toChatHistory } from "../dist/ui/session-history.js";
 test("toChatHistory keeps visible messages and skips tool messages", () => {
   assert.deepEqual(
     toChatHistory([
-      { role: "user", content: "hello" },
-      { role: "assistant", content: "hi" },
-      { role: "tool", content: "internal result", toolResults: [] },
-      { role: "system", content: "notice" },
-      { role: "assistant", content: "" },
+      { role: "user", content: [{ type: "text", text: "hello" }] },
+      { role: "assistant", content: [{ type: "text", text: "hi" }] },
+      { role: "tool", content: [{ type: "text", text: "internal result" }] },
+      { role: "system", content: [{ type: "text", text: "notice" }] },
+      { role: "assistant", content: [] },
     ]),
     [
       { id: "history-0", role: "user", content: "hello" },

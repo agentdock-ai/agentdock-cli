@@ -1,4 +1,4 @@
-import type { Tool, ToolExecuteInput } from "agentdock";
+import type { Tool, ToolExecuteInput } from "@agentdock-ai/agentdock";
 import type { WorkspaceFileService } from "./workspace-file-service.js";
 
 export abstract class WorkspaceTool implements Tool {
@@ -19,10 +19,16 @@ export abstract class WorkspaceTool implements Tool {
 
   protected abstract run(input: ToolExecuteInput): Promise<unknown>;
 
-  protected requiredString(input: Record<string, unknown>, name: string, allowEmpty = false): string {
+  protected requiredString(
+    input: Record<string, unknown>,
+    name: string,
+    allowEmpty = false,
+  ): string {
     const value = input[name];
     if (typeof value !== "string" || (!allowEmpty && !value.trim())) {
-      throw new Error(`${name} must be a${allowEmpty ? "" : " non-empty"} string`);
+      throw new Error(
+        `${name} must be a${allowEmpty ? "" : " non-empty"} string`,
+      );
     }
     return value;
   }
@@ -35,7 +41,7 @@ export class ReadFileTool extends WorkspaceTool {
     type: "object",
     properties: { path: { type: "string" } },
     required: ["path"],
-  } as const;
+  };
 
   protected run({ input }: ToolExecuteInput): Promise<unknown> {
     return this.files.read(this.requiredString(input, "path"));
@@ -44,13 +50,14 @@ export class ReadFileTool extends WorkspaceTool {
 
 export class ListFilesTool extends WorkspaceTool {
   readonly name = "list_files";
-  readonly description = "Return the complete recursive file tree of the current workspace. Directories include nested children; files include their relative paths. Symbolic links are excluded.";
+  readonly description =
+    "Return the complete recursive file tree of the current workspace. Directories include nested children; files include their relative paths. Symbolic links are excluded.";
   readonly parameters = {
     type: "object",
     properties: {},
     required: [],
     additionalProperties: false,
-  } as const;
+  };
 
   protected run(): Promise<unknown> {
     return this.files.list();
@@ -59,12 +66,13 @@ export class ListFilesTool extends WorkspaceTool {
 
 export class SearchFilesTool extends WorkspaceTool {
   readonly name = "search_files";
-  readonly description = "Search text files in the workspace for a literal query.";
+  readonly description =
+    "Search text files in the workspace for a literal query.";
   readonly parameters = {
     type: "object",
     properties: { query: { type: "string" } },
     required: ["query"],
-  } as const;
+  };
 
   protected run({ input }: ToolExecuteInput): Promise<unknown> {
     return this.files.search(this.requiredString(input, "query"));
@@ -78,7 +86,7 @@ export class WriteFileTool extends WorkspaceTool {
     type: "object",
     properties: { path: { type: "string" }, content: { type: "string" } },
     required: ["path", "content"],
-  } as const;
+  };
 
   protected run({ input }: ToolExecuteInput): Promise<unknown> {
     return this.files.write(
@@ -99,7 +107,7 @@ export class UpdateFileTool extends WorkspaceTool {
       newText: { type: "string" },
     },
     required: ["path", "oldText", "newText"],
-  } as const;
+  };
 
   protected run({ input }: ToolExecuteInput): Promise<unknown> {
     return this.files.update(

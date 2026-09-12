@@ -1,4 +1,9 @@
-import type { AgentEvent, ToolApprovalDecision, ToolApprovalRequest } from "agentdock";
+import {
+  AgentEventType,
+  type AgentEvent,
+  type ToolApprovalDecision,
+  type ToolApprovalRequest,
+} from "@agentdock-ai/agentdock";
 import type { AgentRunControlUpdate } from "../../application/contracts/app-types.js";
 import type { ApprovalSubmit, PromptResult, SubmitPrompt } from "../types.js";
 
@@ -14,8 +19,15 @@ export class ChatRequestController {
     private readonly approveRequest: ApprovalSubmit,
   ) {}
 
-  submit(prompt: string, callbacks: ChatRequestCallbacks): Promise<ChatRequestResult> {
-    return this.run((onEvent, onRunControl) => this.submitPrompt(prompt, onEvent, onRunControl), callbacks);
+  submit(
+    prompt: string,
+    callbacks: ChatRequestCallbacks,
+  ): Promise<ChatRequestResult> {
+    return this.run(
+      (onEvent, onRunControl) =>
+        this.submitPrompt(prompt, onEvent, onRunControl),
+      callbacks,
+    );
   }
 
   approve(
@@ -24,7 +36,8 @@ export class ChatRequestController {
     callbacks: ChatRequestCallbacks,
   ): Promise<ChatRequestResult> {
     return this.run(
-      (onEvent, onRunControl) => this.approveRequest(request, decisions, onEvent, onRunControl),
+      (onEvent, onRunControl) =>
+        this.approveRequest(request, decisions, onEvent, onRunControl),
       callbacks,
     );
   }
@@ -34,16 +47,16 @@ export class ChatRequestController {
     callbacks: ChatRequestCallbacks,
   ): Promise<ChatRequestResult> {
     let streamedContent = "";
-    const response = await execute(
-      (event) => {
-        callbacks.onEvent(event);
-        if (event.type === "text.delta") {
-          streamedContent += event.text;
-          callbacks.onText(streamedContent);
-        }
-      },
-      callbacks.onRunControl,
-    );
+    const response = await execute((event) => {
+      callbacks.onEvent(event);
+      if (
+        event.type === AgentEventType.MessagePartDelta &&
+        event.part.type === "text"
+      ) {
+        streamedContent += event.part.text;
+        callbacks.onText(streamedContent);
+      }
+    }, callbacks.onRunControl);
     return { response, streamedContent };
   }
 }

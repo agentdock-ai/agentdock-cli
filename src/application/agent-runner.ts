@@ -5,8 +5,8 @@ import {
   type AgentEvent,
   type AgentRunResult,
   type ToolApprovalDecision,
-} from "agentdock";
-import type { CheckpointAdapter } from "@agentdock/checkpoint";
+} from "@agentdock-ai/agentdock";
+import type { CheckpointAdapter } from "@agentdock-ai/checkpoint";
 import { SystemPromptLoader } from "../infrastructure/prompts/system-prompt-loader.js";
 import { WorkspaceToolFactory } from "../infrastructure/workspace/workspace-tool-factory.js";
 import type { AgentRunControlUpdate } from "./contracts/app-types.js";
@@ -121,6 +121,12 @@ export class AgentRunner {
         systemPrompt,
         maxSteps: MAX_AGENT_STEPS,
       },
+      contextManagement: {
+        summarization: {
+          trigger: { messages: 60 },
+          keep: { messages: 24 },
+        },
+      },
     });
     this.activeAgents.add(agent);
     const startedAt = Date.now();
@@ -153,9 +159,12 @@ export class AgentRunner {
           options.onRunControl?.({ stop: () => agent.stop(event.runId) });
         }
         options.onEvent?.(event);
-        if (event.type === AgentEventType.TextDelta) {
+        if (
+          event.type === AgentEventType.MessagePartDelta &&
+          event.part.type === "text"
+        ) {
           textChunkCount += 1;
-          textLength += event.text.length;
+          textLength += event.part.text.length;
         }
       }
 

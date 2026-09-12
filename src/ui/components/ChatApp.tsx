@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { Box, Text, useApp, useInput } from "ink";
-import { type AgentEvent, type Message as AgentMessage, type ToolApprovalDecision, type ToolApprovalRequest } from "agentdock";
+import { type AgentEvent, type Message as AgentMessage, type ToolApprovalDecision, type ToolApprovalRequest } from "@agentdock-ai/agentdock";
 import { AgentHeader } from "./AgentHeader.js";
 import { ApprovalPrompt } from "./ApprovalPrompt.js";
 import { ChatInput } from "./ChatInput.js";

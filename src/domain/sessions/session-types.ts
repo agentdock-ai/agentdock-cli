@@ -2,7 +2,7 @@ import type {
   AgentRunStatus,
   Message,
   ToolApprovalRequest,
-} from "agentdock";
+} from "@agentdock-ai/agentdock";
 
 export interface CliRun {
   id: string;

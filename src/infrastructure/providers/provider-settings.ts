@@ -1,4 +1,4 @@
-import { AgentDockModel } from "@agentdock/models";
+import { AgentDockModel } from "@agentdock-ai/models";
 import type { BaseChatModel } from "@langchain/core/language_models/chat_models";
 import { defaultModelId, type ModelDefinition, modelCatalog } from "../../domain/models/model-catalog.js";
 

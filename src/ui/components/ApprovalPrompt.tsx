@@ -1,6 +1,6 @@
 import React from "react";
 import { Box, Text, useInput } from "ink";
-import type { ToolApprovalRequest } from "agentdock";
+import type { ToolApprovalRequest } from "@agentdock-ai/agentdock";
 import { palette } from "../theme.js";
 
 export function ApprovalPrompt({

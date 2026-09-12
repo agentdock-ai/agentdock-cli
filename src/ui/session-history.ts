@@ -1,14 +1,24 @@
-import type { Message } from "agentdock";
+import type { Message, ContentPart } from "@agentdock-ai/agentdock";
 import type { ChatMessage } from "./types.js";
 
 export function toChatHistory(messages: readonly Message[]): ChatMessage[] {
   return messages.flatMap((message, index) => {
-    if (message.role === "tool" || !message.content.trim()) return [];
+    const content = contentText(message.content);
+    if (message.role === "tool" || !content.trim()) return [];
 
-    return [{
-      id: `${message.id ?? "history"}-${index}`,
-      role: message.role,
-      content: message.content,
-    }];
+    return [
+      {
+        id: `${message.id ?? "history"}-${index}`,
+        role: message.role,
+        content,
+      },
+    ];
   });
+}
+
+function contentText(parts: readonly ContentPart[]): string {
+  return parts
+    .filter((part) => part.type === "text")
+    .map((part) => part.text)
+    .join("");
 }

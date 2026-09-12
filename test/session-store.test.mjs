@@ -6,7 +6,9 @@ import { test } from "node:test";
 import { SessionStore } from "../dist/infrastructure/persistence/session-store.js";
 
 test("SessionStore lists resumable session summaries", async () => {
-  const directory = await mkdtemp(path.join(os.tmpdir(), "agentdock-cli-session-"));
+  const directory = await mkdtemp(
+    path.join(os.tmpdir(), "agentdock-cli-session-"),
+  );
   const store = new SessionStore(directory);
   const session = store.create(directory);
   await store.save(session);
@@ -25,19 +27,25 @@ test("SessionStore lists resumable session summaries", async () => {
 });
 
 test("SessionStore serializes concurrent session mutations", async () => {
-  const directory = await mkdtemp(path.join(os.tmpdir(), "agentdock-cli-session-"));
+  const directory = await mkdtemp(
+    path.join(os.tmpdir(), "agentdock-cli-session-"),
+  );
   const store = new SessionStore(directory);
   const session = store.create(directory);
   await store.save(session);
 
   await Promise.all([
-    store.update(session.id, (current) => current.messages.push({ role: "user", content: "one" })),
-    store.update(session.id, (current) => current.messages.push({ role: "user", content: "two" })),
+    store.update(session.id, (current) =>
+      current.messages.push({ role: "user", content: "one" }),
+    ),
+    store.update(session.id, (current) =>
+      current.messages.push({ role: "user", content: "two" }),
+    ),
   ]);
 
   const loaded = await store.load(session.id);
   assert.deepEqual(
-    loaded.messages.map((message) => message.content).sort(),
+    loaded.messages.map((message) => message.content[0].text).sort(),
     ["one", "two"],
   );
 });

@@ -1,4 +1,9 @@
-import type { AgentEvent, Message, ToolApprovalDecision, ToolApprovalRequest } from "agentdock";
+import type {
+  AgentEvent,
+  Message,
+  ToolApprovalDecision,
+  ToolApprovalRequest,
+} from "@agentdock-ai/agentdock";
 import type { AgentRunControlUpdate } from "../application/contracts/app-types.js";
 import type { CliProvider } from "../infrastructure/providers/provider-settings.js";
 import type { ModelDefinition } from "../domain/models/model-catalog.js";

@@ -4,8 +4,13 @@ import type {
   ToolApprovalRequest,
   ToolCallRecord,
   ToolResultRecord,
-} from "agentdock";
-import type { JsonObject, JsonValue } from "@agentdock/contracts";
+} from "@agentdock-ai/agentdock";
+import type { ContentPart } from "@agentdock-ai/agentdock";
+import {
+  cloneContentParts,
+  type JsonObject,
+  type JsonValue,
+} from "@agentdock-ai/contracts";
 import type {
   CliRun,
   CliSession,
@@ -175,13 +180,14 @@ export class SessionCodec {
     if (
       !isRecord(value) ||
       typeof value.role !== "string" ||
-      typeof value.content !== "string"
+      (typeof value.content !== "string" && !Array.isArray(value.content))
     ) {
       throw new Error(`Invalid message at ${field}: ${sessionId}`);
     }
+    const content = readContent(value.content, field, sessionId);
     const metadata = this.readMetadata(value, field, sessionId);
     if (value.role === "user" || value.role === "system") {
-      return { role: value.role, content: value.content, ...metadata };
+      return { role: value.role, content, ...metadata };
     }
     if (value.role === "assistant") {
       const toolCalls =
@@ -190,17 +196,27 @@ export class SessionCodec {
           : this.readToolCalls(value.toolCalls, sessionId);
       return {
         role: "assistant",
-        content: value.content,
+        content: [
+          ...content,
+          ...(toolCalls ?? []).map((toolCall) => ({
+            type: "tool-call" as const,
+            toolCall,
+          })),
+        ],
         ...metadata,
-        ...(toolCalls ? { toolCalls } : {}),
       };
     }
     if (value.role === "tool") {
       const toolResults = this.readToolResults(value.toolResults, sessionId);
       return {
         role: "tool",
-        content: value.content,
-        toolResults,
+        content: [
+          ...content,
+          ...toolResults.map((result) => ({
+            type: "tool-result" as const,
+            result,
+          })),
+        ],
         ...metadata,
       };
     }
@@ -340,6 +356,25 @@ export class SessionCodec {
       return value.map((candidate) => this.readJsonValue(candidate, field));
     if (isRecord(value)) return this.readJsonObject(value, field);
     throw new Error(`Invalid ${field}`);
+  }
+}
+
+function readContent(
+  value: unknown,
+  field: string,
+  sessionId: string,
+): ContentPart[] {
+  // Migrate session files written before the runtime adopted structured content.
+  const parts =
+    typeof value === "string"
+      ? value
+        ? [{ type: "text", text: value }]
+        : []
+      : value;
+  try {
+    return cloneContentParts(parts, `Message content at ${field}`);
+  } catch {
+    throw new Error(`Invalid message content at ${field}: ${sessionId}`);
   }
 }
 

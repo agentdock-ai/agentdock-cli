@@ -1,8 +1,18 @@
-import { mkdir, readFile, readdir, rename, rm, writeFile } from "node:fs/promises";
+import {
+  mkdir,
+  readFile,
+  readdir,
+  rename,
+  rm,
+  writeFile,
+} from "node:fs/promises";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
 import { isValidSessionId } from "../../domain/sessions/session-id.js";
-import type { CliSession, SessionSummary } from "../../domain/sessions/session-types.js";
+import type {
+  CliSession,
+  SessionSummary,
+} from "../../domain/sessions/session-types.js";
 import { SessionCodec } from "./session-codec.js";
 
 export class SessionStore {
@@ -123,17 +133,33 @@ export class SessionStore {
 }
 
 function isFileNotFound(error: unknown): boolean {
-  return typeof error === "object" && error !== null && "code" in error && error.code === "ENOENT";
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    "code" in error &&
+    error.code === "ENOENT"
+  );
 }
 
 function sessionPreview(session: CliSession): string {
   const message = [...session.messages]
     .reverse()
-    .find((candidate) =>
-      (candidate.role === "user" || candidate.role === "assistant") && candidate.content.trim(),
+    .find(
+      (candidate) =>
+        (candidate.role === "user" || candidate.role === "assistant") &&
+        contentText(candidate.content).trim(),
     );
   if (!message) return "Empty session";
 
-  const preview = message.content.replace(/\s+/g, " ").trim();
+  const preview = contentText(message.content).replace(/\s+/g, " ").trim();
   return preview.length > 96 ? `${preview.slice(0, 93)}...` : preview;
+}
+
+function contentText(
+  parts: readonly { type: string; text?: string }[],
+): string {
+  return parts
+    .filter((part) => part.type === "text")
+    .map((part) => part.text ?? "")
+    .join("");
 }

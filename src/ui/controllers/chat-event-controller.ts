@@ -1,91 +1,115 @@
-import { AgentEventType, type AgentEvent, type ToolApprovalRequest } from "agentdock";
+import {
+  AgentEventType,
+  type AgentEvent,
+  type ToolApprovalRequest,
+} from "@agentdock-ai/agentdock";
+import { isJsonObject } from "@agentdock-ai/contracts";
 import type { ChatMessage, ToolActivity, ToolCallState } from "../types.js";
 
 export interface ChatEventCallbacks {
   appendText?: (text: string) => void;
   updateMessages: (updater: (current: ChatMessage[]) => ChatMessage[]) => void;
-  updateToolActivity: (updater: (current: ToolActivity[]) => ToolActivity[]) => void;
-  updateApprovals: (updater: (current: ToolApprovalRequest[]) => ToolApprovalRequest[]) => void;
+  updateToolActivity: (
+    updater: (current: ToolActivity[]) => ToolActivity[],
+  ) => void;
+  updateApprovals: (
+    updater: (current: ToolApprovalRequest[]) => ToolApprovalRequest[],
+  ) => void;
 }
 
 export class ChatEventController {
-  handle(event: AgentEvent, assistantId: string, callbacks: ChatEventCallbacks): void {
-    if (event.type === AgentEventType.TextDelta) {
-      callbacks.appendText?.(event.text);
+  handle(
+    event: AgentEvent,
+    assistantId: string,
+    callbacks: ChatEventCallbacks,
+  ): void {
+    if (event.type === AgentEventType.MessagePartDelta) {
+      if (event.part.type === "text") callbacks.appendText?.(event.part.text);
       return;
     }
 
     if (event.type === AgentEventType.ToolCalled) {
-      callbacks.updateMessages((current) => this.upsertToolMessage(current, assistantId, {
-        toolCallId: event.toolCall.toolCallId,
-        toolName: event.toolCall.name,
-        toolInput: event.toolCall.input,
-        toolState: "running",
-      }));
-      callbacks.updateToolActivity((current) => this.setToolActivity(current, event.toolCall.name, "running"));
-      return;
-    }
-
-    if (event.type === AgentEventType.ToolResult) {
-      callbacks.updateMessages((current) => this.upsertToolMessage(current, assistantId, {
-        toolCallId: event.result.toolCallId,
-        toolName: event.result.name,
-        toolInput: event.result.input,
-        toolState: "complete",
-        toolOutput: event.result.output,
-      }));
-      callbacks.updateToolActivity((current) => this.setToolActivity(current, event.result.name, "complete"));
-      return;
-    }
-
-    if (event.type === AgentEventType.ToolError) {
-      callbacks.updateMessages((current) => this.upsertToolMessage(current, assistantId, {
-        toolCallId: event.error.toolCallId,
-        toolName: event.error.name,
-        toolInput: event.error.input,
-        toolState: "error",
-        toolError: event.error.error,
-      }));
-      callbacks.updateToolActivity((current) => this.setToolActivity(current, event.error.name, "error"));
-      return;
-    }
-
-    if (event.type === AgentEventType.ApprovalRequired) {
-      callbacks.updateMessages((current) => event.approvals.reduce(
-        (messages, approval) => this.upsertToolMessage(messages, assistantId, {
-          toolCallId: approval.toolCall.toolCallId,
-          toolName: approval.toolCall.name,
-          toolInput: approval.toolCall.input,
-          toolState: "approval_required",
+      callbacks.updateMessages((current) =>
+        this.upsertToolMessage(current, assistantId, {
+          toolCallId: event.toolCall.toolCallId,
+          toolName: event.toolCall.name,
+          toolInput: event.toolCall.input,
+          toolState: "running",
         }),
-        current,
-      ));
-      callbacks.updateApprovals((current) => this.mergeApprovalRequests(current, event.approvals));
+      );
+      callbacks.updateToolActivity((current) =>
+        this.setToolActivity(current, event.toolCall.name, "running"),
+      );
       return;
     }
 
-    if (event.type === AgentEventType.ApprovalResolved) {
-      callbacks.updateMessages((current) => event.approvals.reduce(
-        (messages, approval) => this.upsertToolMessage(messages, assistantId, approval.approved
-          ? {
-            toolCallId: approval.toolCall.toolCallId,
-            toolName: approval.toolCall.name,
-            toolInput: approval.toolCall.input,
-            toolState: "running",
-          }
-          : {
-            toolCallId: approval.toolCall.toolCallId,
-            toolName: approval.toolCall.name,
-            toolInput: approval.toolCall.input,
-            toolState: "error",
-            toolError: approval.reason ?? "Tool approval denied",
-          }),
-        current,
-      ));
+    if (event.type === AgentEventType.ToolCompleted) {
+      callbacks.updateMessages((current) =>
+        this.upsertToolMessage(current, assistantId, {
+          toolCallId: event.result.toolCallId,
+          toolName: event.result.name,
+          toolInput: event.result.input,
+          toolState: "complete",
+          toolOutput: event.result.output,
+        }),
+      );
+      callbacks.updateToolActivity((current) =>
+        this.setToolActivity(current, event.result.name, "complete"),
+      );
+      return;
+    }
+
+    if (event.type === AgentEventType.ToolFailed) {
+      callbacks.updateMessages((current) =>
+        this.upsertToolMessage(current, assistantId, {
+          toolCallId: event.error.toolCallId,
+          toolName: event.error.name,
+          toolInput: event.error.input,
+          toolState: "error",
+          toolError: event.error.error,
+        }),
+      );
+      callbacks.updateToolActivity((current) =>
+        this.setToolActivity(current, event.error.name, "error"),
+      );
+      return;
+    }
+
+    if (event.type === AgentEventType.InterruptRequired) {
+      if (event.interrupt.kind !== "tool-approval") return;
+      const approvals: ToolApprovalRequest[] = event.interrupt.actions.map(
+        (action) => ({
+          approvalId: action.id,
+          toolCall: {
+            toolCallId: action.id,
+            name: action.name,
+            input: isJsonObject(action.input) ? action.input : {},
+          },
+        }),
+      );
+      callbacks.updateMessages((current) =>
+        approvals.reduce(
+          (messages, approval) =>
+            this.upsertToolMessage(messages, assistantId, {
+              toolCallId: approval.toolCall.toolCallId,
+              toolName: approval.toolCall.name,
+              toolInput: approval.toolCall.input,
+              toolState: "approval_required",
+            }),
+          current,
+        ),
+      );
+      callbacks.updateApprovals((current) =>
+        this.mergeApprovalRequests(current, approvals),
+      );
     }
   }
 
-  private setToolActivity(current: ToolActivity[], name: string, state: ToolActivity["state"]): ToolActivity[] {
+  private setToolActivity(
+    current: ToolActivity[],
+    name: string,
+    state: ToolActivity["state"],
+  ): ToolActivity[] {
     return [...current.filter((item) => item.name !== name), { name, state }];
   }
 
@@ -93,7 +117,9 @@ export class ChatEventController {
     current: readonly ToolApprovalRequest[],
     incoming: readonly ToolApprovalRequest[],
   ): ToolApprovalRequest[] {
-    const requests = new Map(current.map((request) => [request.approvalId, request]));
+    const requests = new Map(
+      current.map((request) => [request.approvalId, request]),
+    );
     for (const request of incoming) requests.set(request.approvalId, request);
     return Array.from(requests.values());
   }
@@ -110,14 +136,29 @@ export class ChatEventController {
       toolError?: string;
     },
   ): ChatMessage[] {
-    const existingIndex = current.findIndex((message) => message.toolCallId === tool.toolCallId);
+    const existingIndex = current.findIndex(
+      (message) => message.toolCallId === tool.toolCallId,
+    );
     if (existingIndex >= 0) {
-      return current.map((message, index) => index === existingIndex ? { ...message, ...tool } : message);
+      return current.map((message, index) =>
+        index === existingIndex ? { ...message, ...tool } : message,
+      );
     }
 
-    const message: ChatMessage = { id: `tool-${tool.toolCallId}`, role: "system", content: "", ...tool };
-    const assistantIndex = current.findIndex((candidate) => candidate.id === assistantId);
+    const message: ChatMessage = {
+      id: `tool-${tool.toolCallId}`,
+      role: "system",
+      content: "",
+      ...tool,
+    };
+    const assistantIndex = current.findIndex(
+      (candidate) => candidate.id === assistantId,
+    );
     if (assistantIndex < 0) return [...current, message];
-    return [...current.slice(0, assistantIndex), message, ...current.slice(assistantIndex)];
+    return [
+      ...current.slice(0, assistantIndex),
+      message,
+      ...current.slice(assistantIndex),
+    ];
   }
 }

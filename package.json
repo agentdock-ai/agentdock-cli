@@ -27,16 +27,16 @@
     "logs:clear": "node scripts/clear-logs.mjs"
   },
   "resolutions": {
-    "@agentdock/checkpoint": "link:../agentdock/packages/checkpoint",
-    "@agentdock/contracts": "link:../agentdock/packages/contracts"
+    "@agentdock-ai/checkpoint": "link:../agentdock/packages/checkpoint",
+    "@agentdock-ai/contracts": "link:../agentdock/packages/contracts"
   },
   "dependencies": {
-    "@agentdock/checkpoint": "link:../agentdock/packages/checkpoint",
-    "@agentdock/checkpoint-sqlite": "link:../agentdock/packages/checkpoint-sqlite",
-    "@agentdock/contracts": "link:../agentdock/packages/contracts",
-    "@agentdock/models": "link:../agentdock/packages/models",
+    "@agentdock-ai/agentdock": "link:../agentdock/packages/agentdock",
+    "@agentdock-ai/checkpoint": "link:../agentdock/packages/checkpoint",
+    "@agentdock-ai/checkpoint-sqlite": "link:../agentdock/packages/checkpoint-sqlite",
+    "@agentdock-ai/contracts": "link:../agentdock/packages/contracts",
+    "@agentdock-ai/models": "link:../agentdock/packages/models",
     "@langchain/core": "^1.2.9",
-    "agentdock": "link:../agentdock/packages/agentdock",
     "ink": "^7.1.1",
     "pino": "^10.3.1",
     "pino-pretty": "^13.1.3",

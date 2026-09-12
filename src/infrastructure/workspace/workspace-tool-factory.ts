@@ -1,4 +1,4 @@
-import { ToolRegistry } from "agentdock";
+import { ToolRegistry } from "@agentdock-ai/agentdock";
 import { WorkspaceFileService } from "./workspace-file-service.js";
 import {
   ListFilesTool,
@@ -11,7 +11,10 @@ import {
 export type WorkspaceToolMode = "normal" | "approve_all";
 
 export class WorkspaceToolFactory {
-  create(workspaceRoot: string, mode: WorkspaceToolMode = "normal"): ToolRegistry {
+  create(
+    workspaceRoot: string,
+    mode: WorkspaceToolMode = "normal",
+  ): ToolRegistry {
     const files = new WorkspaceFileService(workspaceRoot);
     const registry = new ToolRegistry();
     registry.register(new ReadFileTool(files));

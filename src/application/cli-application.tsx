@@ -1,7 +1,7 @@
 import path from "node:path";
 import { render } from "ink";
-import { SqliteCheckpoint } from "@agentdock/checkpoint-sqlite";
-import type { AgentRunResult } from "agentdock";
+import { SqliteCheckpoint } from "@agentdock-ai/checkpoint-sqlite";
+import type { AgentRunResult, ContentPart } from "@agentdock-ai/agentdock";
 import { AgentRunner, type ApprovalInput } from "./agent-runner.js";
 import { CommandDispatcher } from "./command-dispatcher.js";
 import { ProviderController } from "./provider-controller.js";
@@ -160,10 +160,17 @@ export class CliApplication {
 
   private toPromptResult(result: AgentRunResult): PromptResult {
     return {
-      content: result.content,
+      content: textContent(result.content),
       runId: result.runId,
       status: result.status,
       approvalRequests: result.approvalRequests,
     };
   }
+}
+
+function textContent(parts: readonly ContentPart[]): string {
+  return parts
+    .filter((part) => part.type === "text")
+    .map((part) => part.text)
+    .join("");
 }

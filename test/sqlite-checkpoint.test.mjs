@@ -3,7 +3,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { test } from "node:test";
-import { SqliteCheckpoint } from "@agentdock/checkpoint-sqlite";
+import { SqliteCheckpoint } from "@agentdock-ai/checkpoint-sqlite";
 
 test("SqliteCheckpoint initializes LangGraph's schema and is idempotent", async () => {
   const directory = await mkdtemp(

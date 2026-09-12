@@ -2,27 +2,30 @@
 # yarn lockfile v1
 
 
-"@agentdock/checkpoint-sqlite@link:../agentdock/packages/checkpoint-sqlite":
+"@agentdock-ai/agentdock@link:../agentdock/packages/agentdock":
   version "0.0.0"
   uid ""
 
-"@agentdock/checkpoint@^0.1.0":
+"@agentdock-ai/checkpoint-sqlite@link:../agentdock/packages/checkpoint-sqlite":
   version "0.0.0"
   uid ""
 
-"@agentdock/checkpoint@link:../agentdock/packages/checkpoint":
+"@agentdock-ai/checkpoint@^0.1.0":
   version "0.0.0"
   uid ""
 
-"@agentdock/contracts@^0.1.0":
+"@agentdock-ai/checkpoint@link:../agentdock/packages/checkpoint":
   version "0.0.0"
   uid ""
 
-"@agentdock/contracts@link:../agentdock/packages/contracts":
+"@agentdock-ai/contracts@^0.1.0":
+  version "0.1.0"
+
+"@agentdock-ai/contracts@link:../agentdock/packages/contracts":
   version "0.0.0"
   uid ""
 
-"@agentdock/models@link:../agentdock/packages/models":
+"@agentdock-ai/models@link:../agentdock/packages/models":
   version "0.0.0"
   uid ""
 
@@ -277,10 +280,6 @@
   integrity sha512-AnzbBERsrLKtk2XSfTbYRLjQPdy116Sty4q+T+Bp3IC4l6jNBvreVPAHmpq9qhXQM7CXZPjLVmGMw9sy+hxQ3w==
   dependencies:
     csstype "^3.2.2"
-
-"agentdock@link:../agentdock/packages/agentdock":
-  version "0.0.0"
-  uid ""
 
 ansi-escapes@^7.3.0:
   version "7.3.0"
