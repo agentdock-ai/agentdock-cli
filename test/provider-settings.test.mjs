@@ -3,13 +3,13 @@ import { test } from "node:test";
 import {
   defaultOllamaBaseUrl,
   defaultOllamaModelId,
-  createProviderModel,
-  listProviderModels,
-  loadProviderSettings,
+  ProviderSettingsService,
 } from "../dist/infrastructure/providers/provider-settings.js";
 
+const providers = new ProviderSettingsService();
+
 test("provider settings use safe OpenRouter defaults", () => {
-  const settings = loadProviderSettings({});
+  const settings = providers.load({});
 
   assert.equal(settings.provider, "openrouter");
   assert.equal(settings.modelId, "google/gemini-2.5-flash");
@@ -17,7 +17,7 @@ test("provider settings use safe OpenRouter defaults", () => {
 });
 
 test("provider settings configure Ollama and list local models", async () => {
-  const settings = loadProviderSettings({
+  const settings = providers.load({
     AGENTDOCK_PROVIDER: "ollama",
     OLLAMA_MODEL: "qwen2.5",
     OLLAMA_BASE_URL: "http://localhost:11434/",
@@ -26,7 +26,7 @@ test("provider settings configure Ollama and list local models", async () => {
   assert.equal(settings.provider, "ollama");
   assert.equal(settings.modelId, "qwen2.5");
   assert.equal(settings.ollamaBaseUrl, "http://localhost:11434");
-  assert.equal(createProviderModel(settings).constructor.name, "ChatOllama");
+  assert.equal(providers.createModel(settings).constructor.name, "ChatOllama");
 
   const originalFetch = globalThis.fetch;
   globalThis.fetch = async (input) => {
@@ -38,7 +38,7 @@ test("provider settings configure Ollama and list local models", async () => {
   };
 
   try {
-    assert.deepEqual(await listProviderModels(settings), [
+    assert.deepEqual(await providers.listModels(settings), [
       { id: "qwen2.5", label: "qwen2.5", description: "local Ollama model" },
       { id: "llama3.2", label: "llama3.2", description: "local Ollama model" },
     ]);
@@ -48,11 +48,11 @@ test("provider settings configure Ollama and list local models", async () => {
 });
 
 test("provider settings create an OpenRouter chat model", () => {
-  const settings = loadProviderSettings({ OPENROUTER_API_KEY: "test-key" });
-  assert.equal(createProviderModel(settings).constructor.name, "ChatOpenRouter");
+  const settings = providers.load({ OPENROUTER_API_KEY: "test-key" });
+  assert.equal(providers.createModel(settings).constructor.name, "ChatOpenRouter");
 });
 
 test("provider settings use the Ollama model default", () => {
-  const settings = loadProviderSettings({ AGENTDOCK_PROVIDER: "ollama" });
+  const settings = providers.load({ AGENTDOCK_PROVIDER: "ollama" });
   assert.equal(settings.modelId, defaultOllamaModelId);
 });

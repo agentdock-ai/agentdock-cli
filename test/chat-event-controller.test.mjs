@@ -13,24 +13,16 @@ const baseEvent = {
   timestamp: new Date().toISOString(),
 };
 
-test("ChatEventController renders canonical text parts and tool approval interrupts", () => {
+test("ChatEventController maps tool approval interrupts to CLI approval requests", () => {
   const controller = new ChatEventController();
   let messages = [];
   let approvals = [];
-  let streamedText = "";
   const callbacks = {
-    appendText: (text) => { streamedText += text; },
     updateMessages: (update) => { messages = update(messages); },
     updateToolActivity: () => {},
     updateApprovals: (update) => { approvals = update(approvals); },
   };
 
-  controller.handle({
-    ...baseEvent,
-    type: "message.part.delta",
-    part: { type: "text", text: "hello" },
-    messageId: "message-1",
-  }, "assistant-1", callbacks);
   controller.handle({
     ...baseEvent,
     eventId: "event-2",
@@ -45,7 +37,6 @@ test("ChatEventController renders canonical text parts and tool approval interru
     },
   }, "assistant-1", callbacks);
 
-  assert.equal(streamedText, "hello");
   assert.deepEqual(approvals, [{
     approvalId: "call-1",
     toolCall: { toolCallId: "call-1", name: "write_file", input: { path: "a.txt" } },

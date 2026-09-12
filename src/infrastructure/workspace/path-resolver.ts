@@ -54,14 +54,6 @@ export class WorkspacePathResolver {
   }
 }
 
-export function resolveWorkspacePath(
-  workspaceRoot: string,
-  input: string,
-  blockedDirectories: ReadonlySet<string> = new Set(),
-): Promise<string> {
-  return new WorkspacePathResolver().resolve(workspaceRoot, input, blockedDirectories);
-}
-
 function isFileNotFound(error: unknown): boolean {
   return typeof error === "object" && error !== null && "code" in error && error.code === "ENOENT";
 }

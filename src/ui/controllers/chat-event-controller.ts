@@ -7,7 +7,6 @@ import { isJsonObject } from "@agentdock-ai/contracts";
 import type { ChatMessage, ToolActivity, ToolCallState } from "../types.js";
 
 export interface ChatEventCallbacks {
-  appendText?: (text: string) => void;
   updateMessages: (updater: (current: ChatMessage[]) => ChatMessage[]) => void;
   updateToolActivity: (
     updater: (current: ToolActivity[]) => ToolActivity[],
@@ -23,11 +22,6 @@ export class ChatEventController {
     assistantId: string,
     callbacks: ChatEventCallbacks,
   ): void {
-    if (event.type === AgentEventType.MessagePartDelta) {
-      if (event.part.type === "text") callbacks.appendText?.(event.part.text);
-      return;
-    }
-
     if (event.type === AgentEventType.ToolCalled) {
       callbacks.updateMessages((current) =>
         this.upsertToolMessage(current, assistantId, {

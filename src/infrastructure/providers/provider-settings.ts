@@ -99,29 +99,3 @@ export class ProviderSettingsService {
     return typeof value === "object" && value !== null;
   }
 }
-
-const defaultService = new ProviderSettingsService();
-
-export function loadProviderSettings(environment: NodeJS.ProcessEnv = process.env): ProviderSettings {
-  return defaultService.load(environment);
-}
-
-export function parseProvider(value: string | undefined): CliProvider {
-  return defaultService.parse(value);
-}
-
-export function isCliProvider(value: string): value is CliProvider {
-  return defaultService.isProvider(value);
-}
-
-export function switchProvider(settings: ProviderSettings, provider: CliProvider): ProviderSettings {
-  return defaultService.switch(settings, provider);
-}
-
-export function createProviderModel(settings: ProviderSettings): BaseChatModel {
-  return defaultService.createModel(settings);
-}
-
-export function listProviderModels(settings: ProviderSettings): Promise<ModelDefinition[]> {
-  return defaultService.listModels(settings);
-}
