@@ -3,7 +3,7 @@ import type {
   Message,
   ToolApprovalDecision,
   ToolApprovalRequest,
-} from "@agentdock-ai/agentdock";
+} from "@agentdock-ai/contracts";
 import type { AgentRunControlUpdate } from "../application/contracts/app-types.js";
 import type { CliProvider } from "../infrastructure/providers/provider-settings.js";
 import type { ModelDefinition } from "../domain/models/model-catalog.js";

@@ -2,7 +2,7 @@ import {
   AgentEventType,
   type AgentEvent,
   type ToolApprovalRequest,
-} from "@agentdock-ai/agentdock";
+} from "@agentdock-ai/contracts";
 import { isJsonObject } from "@agentdock-ai/contracts";
 import type { ChatMessage, ToolActivity, ToolCallState } from "../types.js";
 

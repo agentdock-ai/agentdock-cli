@@ -1,15 +1,14 @@
-import type {
-  AgentRunStatus,
-  Message,
-  ToolApprovalRequest,
-} from "@agentdock-ai/agentdock";
+import type { Message, ToolApprovalRequest } from "@agentdock-ai/contracts";
+
+export type CliRunStatus =
+  "waiting_for_approval" | "completed" | "failed" | "cancelled";
 
 export interface CliRun {
   id: string;
   startedAt: string;
   updatedAt: string;
   completedAt?: string;
-  status: AgentRunStatus;
+  status: CliRunStatus;
   messages: Message[];
   pendingApprovals: ToolApprovalRequest[];
   stepsCompleted: number;
