@@ -6,26 +6,10 @@
   version "0.0.0"
   uid ""
 
-"@agentdock-ai/checkpoint-sqlite@link:../agentdock/packages/checkpoint-sqlite":
-  version "0.0.0"
-  uid ""
-
-"@agentdock-ai/checkpoint@^0.1.0":
-  version "0.0.0"
-  uid ""
-
-"@agentdock-ai/checkpoint@link:../agentdock/packages/checkpoint":
-  version "0.0.0"
-  uid ""
-
 "@agentdock-ai/contracts@^0.1.0":
   version "0.1.0"
 
 "@agentdock-ai/contracts@link:../agentdock/packages/contracts":
-  version "0.0.0"
-  uid ""
-
-"@agentdock-ai/models@link:../agentdock/packages/models":
   version "0.0.0"
   uid ""
 
@@ -224,7 +208,7 @@
   dependencies:
     ollama "^0.6.3"
 
-"@langchain/openai@1.5.10", "@langchain/openai@^1.5.10":
+"@langchain/openai@1.5.10":
   version "1.5.10"
   resolved "https://registry.yarnpkg.com/@langchain/openai/-/openai-1.5.10.tgz#96ae81ee6a005bca20e65454a187116e10b12e82"
   integrity sha512-4cxdgolkkXwnAiGEkNrue+ba7jUKjfBwleLCX5DrRVcRGrCc4w5EceblYZOIaHMY6+nhwMqIOtSzBWgcBCLfmw==

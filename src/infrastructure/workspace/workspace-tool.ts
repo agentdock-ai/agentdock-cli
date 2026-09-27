@@ -1,119 +1,38 @@
-import type { Tool, ToolExecuteInput } from "@agentdock-ai/agentdock";
+import { tool } from "langchain";
+import { z } from "zod";
 import type { WorkspaceFileService } from "./workspace-file-service.js";
 
-export abstract class WorkspaceTool implements Tool {
-  readonly execute: (input: ToolExecuteInput) => Promise<unknown>;
-
-  constructor(
-    protected readonly files: WorkspaceFileService,
-    requiresApproval = false,
-  ) {
-    this.execute = (input) => this.run(input);
-    if (requiresApproval) this.requiresApproval = true;
-  }
-
-  abstract readonly name: string;
-  abstract readonly description: string;
-  abstract readonly parameters: Tool["parameters"];
-  readonly requiresApproval?: boolean;
-
-  protected abstract run(input: ToolExecuteInput): Promise<unknown>;
-
-  protected requiredString(
-    input: Record<string, unknown>,
-    name: string,
-    allowEmpty = false,
-  ): string {
-    const value = input[name];
-    if (typeof value !== "string" || (!allowEmpty && !value.trim())) {
-      throw new Error(
-        `${name} must be a${allowEmpty ? "" : " non-empty"} string`,
-      );
-    }
-    return value;
-  }
-}
-
-export class ReadFileTool extends WorkspaceTool {
-  readonly name = "read_file";
-  readonly description = "Read a UTF-8 text file inside the workspace.";
-  readonly parameters = {
-    type: "object",
-    properties: { path: { type: "string" } },
-    required: ["path"],
-  };
-
-  protected run({ input }: ToolExecuteInput): Promise<unknown> {
-    return this.files.read(this.requiredString(input, "path"));
-  }
-}
-
-export class ListFilesTool extends WorkspaceTool {
-  readonly name = "list_files";
-  readonly description =
-    "Return the complete recursive file tree of the current workspace. Directories include nested children; files include their relative paths. Symbolic links are excluded.";
-  readonly parameters = {
-    type: "object",
-    properties: {},
-    required: [],
-    additionalProperties: false,
-  };
-
-  protected run(): Promise<unknown> {
-    return this.files.list();
-  }
-}
-
-export class SearchFilesTool extends WorkspaceTool {
-  readonly name = "search_files";
-  readonly description =
-    "Search text files in the workspace for a literal query.";
-  readonly parameters = {
-    type: "object",
-    properties: { query: { type: "string" } },
-    required: ["query"],
-  };
-
-  protected run({ input }: ToolExecuteInput): Promise<unknown> {
-    return this.files.search(this.requiredString(input, "query"));
-  }
-}
-
-export class WriteFileTool extends WorkspaceTool {
-  readonly name = "write_file";
-  readonly description = "Create or replace a UTF-8 text file.";
-  readonly parameters = {
-    type: "object",
-    properties: { path: { type: "string" }, content: { type: "string" } },
-    required: ["path", "content"],
-  };
-
-  protected run({ input }: ToolExecuteInput): Promise<unknown> {
-    return this.files.write(
-      this.requiredString(input, "path"),
-      this.requiredString(input, "content", true),
-    );
-  }
-}
-
-export class UpdateFileTool extends WorkspaceTool {
-  readonly name = "update_file";
-  readonly description = "Replace an exact text fragment in a UTF-8 file.";
-  readonly parameters = {
-    type: "object",
-    properties: {
-      path: { type: "string" },
-      oldText: { type: "string" },
-      newText: { type: "string" },
-    },
-    required: ["path", "oldText", "newText"],
-  };
-
-  protected run({ input }: ToolExecuteInput): Promise<unknown> {
-    return this.files.update(
-      this.requiredString(input, "path"),
-      this.requiredString(input, "oldText"),
-      this.requiredString(input, "newText", true),
-    );
-  }
+export function createWorkspaceTools(files: WorkspaceFileService) {
+  return [
+    tool(({ path }) => files.read(path), {
+      name: "read_file",
+      description: "Read a UTF-8 text file inside the workspace.",
+      schema: z.object({ path: z.string().min(1) }),
+    }),
+    tool(() => files.list(), {
+      name: "list_files",
+      description:
+        "Return the complete recursive file tree of the current workspace.",
+      schema: z.object({}),
+    }),
+    tool(({ query }) => files.search(query), {
+      name: "search_files",
+      description: "Search text files in the workspace for a literal query.",
+      schema: z.object({ query: z.string().min(1) }),
+    }),
+    tool(({ path, content }) => files.write(path, content), {
+      name: "write_file",
+      description: "Create or replace a UTF-8 text file.",
+      schema: z.object({ path: z.string().min(1), content: z.string() }),
+    }),
+    tool(({ path, oldText, newText }) => files.update(path, oldText, newText), {
+      name: "update_file",
+      description: "Replace an exact text fragment in a UTF-8 file.",
+      schema: z.object({
+        path: z.string().min(1),
+        oldText: z.string().min(1),
+        newText: z.string(),
+      }),
+    }),
+  ];
 }

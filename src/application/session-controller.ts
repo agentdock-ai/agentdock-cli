@@ -1,7 +1,13 @@
 import { mkdir } from "node:fs/promises";
-import type { AgentRunResult } from "@agentdock-ai/agentdock";
+import type { ToolApprovalRequest } from "@agentdock-ai/contracts";
+import type { CliAgentRunResult } from "./agent-runner.js";
 import { SessionStore } from "../infrastructure/persistence/session-store.js";
-import type { CliRun, CliSession, SessionSummary } from "../domain/sessions/session-types.js";
+import type {
+  CliRun,
+  CliRunStatus,
+  CliSession,
+  SessionSummary,
+} from "../domain/sessions/session-types.js";
 
 export class SessionController {
   private activeSession: CliSession | null = null;
@@ -12,7 +18,8 @@ export class SessionController {
   ) {}
 
   get current(): CliSession {
-    if (!this.activeSession) throw new Error("CLI session has not been initialized");
+    if (!this.activeSession)
+      throw new Error("CLI session has not been initialized");
     return this.activeSession;
   }
 
@@ -42,14 +49,18 @@ export class SessionController {
     return this.current;
   }
 
-  async recordRun(result: AgentRunResult): Promise<void> {
+  async recordRun(result: CliAgentRunResult): Promise<void> {
     const now = new Date().toISOString();
     await this.store.update(this.current.id, (session) => {
-      const existingIndex = session.runs.findIndex((run) => run.id === result.runId);
-      const existing = existingIndex >= 0 ? session.runs[existingIndex] : undefined;
-      const messages = result.messages.length > 0
-        ? structuredClone(result.messages)
-        : structuredClone(session.messages);
+      const existingIndex = session.runs.findIndex(
+        (run) => run.id === result.runId,
+      );
+      const existing =
+        existingIndex >= 0 ? session.runs[existingIndex] : undefined;
+      const messages =
+        result.messages.length > 0
+          ? structuredClone(result.messages)
+          : structuredClone(session.messages);
       const run: CliRun = {
         id: result.runId,
         startedAt: existing?.startedAt ?? now,
@@ -80,7 +91,7 @@ export class SessionController {
     await this.store.save(this.current);
   }
 
-  pendingApprovals(): AgentRunResult["approvalRequests"] {
+  pendingApprovals(): ToolApprovalRequest[] {
     return this.current.runs
       .filter((run) => run.status === "waiting_for_approval")
       .flatMap((run) => run.pendingApprovals);
@@ -88,7 +99,10 @@ export class SessionController {
 
   findRunId(approvalId: string): string {
     const run = this.current.runs.find((candidate) =>
-      candidate.pendingApprovals.some((request) => request.approvalId === approvalId));
+      candidate.pendingApprovals.some(
+        (request) => request.approvalId === approvalId,
+      ),
+    );
     if (!run) throw new Error(`Approval request not found: ${approvalId}`);
     return run.id;
   }
@@ -107,6 +121,8 @@ export class SessionController {
   }
 }
 
-function isTerminal(status: AgentRunResult["status"]): boolean {
-  return status === "completed" || status === "failed" || status === "cancelled";
+function isTerminal(status: CliRunStatus): boolean {
+  return (
+    status === "completed" || status === "failed" || status === "cancelled"
+  );
 }

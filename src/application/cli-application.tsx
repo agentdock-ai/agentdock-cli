@@ -1,8 +1,13 @@
 import path from "node:path";
+import { mkdirSync } from "node:fs";
 import { render } from "ink";
-import { SqliteCheckpoint } from "@agentdock-ai/checkpoint-sqlite";
-import type { AgentRunResult, ContentPart } from "@agentdock-ai/agentdock";
-import { AgentRunner, type ApprovalInput } from "./agent-runner.js";
+import { SqliteSaver } from "@langchain/langgraph-checkpoint-sqlite";
+import type { ContentPart } from "@agentdock-ai/contracts";
+import {
+  AgentRunner,
+  type ApprovalInput,
+  type CliAgentRunResult,
+} from "./agent-runner.js";
 import { CommandDispatcher } from "./command-dispatcher.js";
 import { ProviderController } from "./provider-controller.js";
 import { SessionController } from "./session-controller.js";
@@ -30,26 +35,27 @@ export class CliApplication {
   private readonly providers: ProviderController;
   private readonly agentRunner: AgentRunner;
   private readonly commands: CommandDispatcher;
+  private readonly checkpointer: SqliteSaver;
 
   constructor(environment: NodeJS.ProcessEnv = process.env) {
     this.defaultWorkspace = path.resolve(
       environment.AGENTDOCK_WORKSPACE?.trim() || process.cwd(),
     );
+    const agentdockDirectory = path.resolve(
+      this.defaultWorkspace,
+      ".agentdock",
+    );
+    mkdirSync(agentdockDirectory, { recursive: true });
     this.store = new SessionStore(
       path.resolve(this.defaultWorkspace, ".agentdock", "sessions"),
     );
     this.logger = createLogger().child({ module: "main" });
     this.sessions = new SessionController(this.store, this.defaultWorkspace);
     this.providers = new ProviderController(undefined, environment);
-    this.agentRunner = new AgentRunner(
-      new SqliteCheckpoint({
-        path: path.resolve(
-          this.defaultWorkspace,
-          ".agentdock",
-          "checkpoints.sqlite",
-        ),
-      }),
+    this.checkpointer = SqliteSaver.fromConnString(
+      path.resolve(agentdockDirectory, "checkpoints.sqlite"),
     );
+    this.agentRunner = new AgentRunner(this.checkpointer);
     this.commands = new CommandDispatcher(this.sessions, this.providers);
   }
 
@@ -88,6 +94,7 @@ export class CliApplication {
       await instance.waitUntilExit();
     } finally {
       await this.agentRunner.close();
+      this.checkpointer.db.close();
       if (session) {
         const latest = await this.sessions.refresh();
         this.logger.info({ sessionId: latest.id }, "agentdock-cli stopped");
@@ -158,7 +165,7 @@ export class CliApplication {
     return this.toPromptResult(result);
   };
 
-  private toPromptResult(result: AgentRunResult): PromptResult {
+  private toPromptResult(result: CliAgentRunResult): PromptResult {
     return {
       content: textContent(result.content),
       runId: result.runId,

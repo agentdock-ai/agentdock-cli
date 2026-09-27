@@ -1,12 +1,16 @@
 import {
-  AgentDock,
   AgentEventType,
-  type AgentContext,
   type AgentEvent,
-  type AgentRunResult,
+  type ContentPart,
+  type JsonObject,
+  type Message,
   type ToolApprovalDecision,
-} from "@agentdock-ai/agentdock";
-import type { CheckpointAdapter } from "@agentdock-ai/checkpoint";
+  type ToolApprovalRequest,
+} from "@agentdock-ai/contracts";
+import { createAgent, humanInTheLoopMiddleware } from "langchain";
+import type { BaseCheckpointSaver } from "@langchain/langgraph";
+import { serveAgent } from "@agentdock-ai/agentdock";
+import { agentEventStateSchema } from "@agentdock-ai/agentdock";
 import { SystemPromptLoader } from "../infrastructure/prompts/system-prompt-loader.js";
 import { WorkspaceToolFactory } from "../infrastructure/workspace/workspace-tool-factory.js";
 import type { AgentRunControlUpdate } from "./contracts/app-types.js";
@@ -18,6 +22,16 @@ import {
 import type { CliSession } from "../domain/sessions/session-types.js";
 
 const MAX_AGENT_STEPS = 30;
+
+export interface CliAgentRunResult {
+  runId: string;
+  status: "waiting_for_approval" | "completed" | "failed" | "cancelled";
+  content: ContentPart[];
+  messages: Message[];
+  approvalRequests: ToolApprovalRequest[];
+  stepsCompleted: number;
+  error?: string;
+}
 
 export interface PromptOptions {
   providerSettings: ProviderSettings;
@@ -34,12 +48,11 @@ export interface ApprovalInput {
 
 export class AgentRunner {
   private lifecycle: "open" | "closing" | "closed" = "open";
-  private initialization: Promise<void> | undefined;
   private closing: Promise<void> | undefined;
-  private readonly activeAgents = new Set<AgentDock>();
+  private readonly activeRuns = new Set<AbortController>();
 
   constructor(
-    private readonly checkpoint: CheckpointAdapter,
+    private readonly checkpointer: BaseCheckpointSaver,
     private readonly promptLoader = new SystemPromptLoader(),
     private readonly toolFactory = new WorkspaceToolFactory(),
     private readonly providerSettings = new ProviderSettingsService(),
@@ -47,49 +60,34 @@ export class AgentRunner {
 
   async initialize(): Promise<void> {
     this.assertOpen();
-    if (this.initialization) return this.initialization;
-
-    this.initialization = this.checkpoint
-      .initialize()
-      .catch((error: unknown) => {
-        this.initialization = undefined;
-        throw error;
-      });
-    return this.initialization;
   }
 
   close(): Promise<void> {
     if (this.lifecycle === "closed") return Promise.resolve();
     if (this.closing) return this.closing;
-
     this.lifecycle = "closing";
-    this.closing = (this.initialization ?? Promise.resolve())
-      .catch(() => undefined)
-      .then(() =>
-        Promise.allSettled(
-          [...this.activeAgents].map((agent) => agent.close()),
-        ),
-      )
-      .then(() => this.checkpoint.close())
-      .finally(() => {
-        this.lifecycle = "closed";
-      });
+    for (const controller of this.activeRuns) {
+      controller.abort(new Error("AgentRunner is closing."));
+    }
+    this.closing = Promise.resolve().then(() => {
+      this.lifecycle = "closed";
+    });
     return this.closing;
   }
 
-  async executePrompt(
+  executePrompt(
     session: CliSession,
     prompt: string,
     options: PromptOptions,
-  ): Promise<{ result: AgentRunResult }> {
+  ): Promise<{ result: CliAgentRunResult }> {
     return this.executeStream(session, prompt, options);
   }
 
-  async resumeApproval(
+  resumeApproval(
     session: CliSession,
     approval: ApprovalInput,
     options: PromptOptions,
-  ): Promise<{ result: AgentRunResult }> {
+  ): Promise<{ result: CliAgentRunResult }> {
     return this.executeStream(session, "", options, approval);
   }
 
@@ -98,40 +96,35 @@ export class AgentRunner {
     prompt: string,
     options: PromptOptions,
     approval?: ApprovalInput,
-  ): Promise<{ result: AgentRunResult }> {
+  ): Promise<{ result: CliAgentRunResult }> {
     await this.initialize();
     this.assertOpen();
     const logger = options.logger.child({ module: "agent" });
-    const context: AgentContext = {
-      userId: "cli-user",
-      organizationId: "cli-organization",
-    };
     const systemPrompt = await this.promptLoader.load();
     this.assertOpen();
-    const agent = new AgentDock({
+    const tools = this.toolFactory.create(session.workspaceRoot);
+    const graph = createAgent({
       model: this.providerSettings.createModel(options.providerSettings),
-      registry: this.toolFactory.create(
-        session.workspaceRoot,
-        approval ? "normal" : options.mode,
-      ),
-      // AgentRunner owns the shared adapter because each request gets a fresh
-      // AgentDock for its model and workspace-specific tool registry.
-      checkpointer: this.checkpoint.saver,
-      defaults: {
-        systemPrompt,
-        maxSteps: MAX_AGENT_STEPS,
-      },
-      contextManagement: {
-        summarization: {
-          trigger: { messages: 60 },
-          keep: { messages: 24 },
-        },
-      },
+      tools,
+      stateSchema: agentEventStateSchema,
+      systemPrompt,
+      checkpointer: this.checkpointer,
+      middleware:
+        options.mode === "normal"
+          ? [
+              humanInTheLoopMiddleware({
+                interruptOn: { write_file: true, update_file: true },
+              }),
+            ]
+          : [],
     });
-    this.activeAgents.add(agent);
+    const runtime = serveAgent(graph.graph, {
+      recursionLimit: MAX_AGENT_STEPS,
+    });
+    const controller = new AbortController();
+    this.activeRuns.add(controller);
     const startedAt = Date.now();
-    let textChunkCount = 0;
-    let textLength = 0;
+    const events: AgentEvent[] = [];
     let runControlPublished = false;
 
     logger.info(
@@ -145,36 +138,40 @@ export class AgentRunner {
     );
 
     try {
-      const response = approval
-        ? await agent.resumeStream(
-            { runId: approval.runId, approvals: approval.approvals },
-            context,
-            { sessionId: session.id },
-          )
-        : await agent.stream(prompt, context, { sessionId: session.id });
+      const run = approval
+        ? {
+            threadId: session.id,
+            resume: { decisions: approval.approvals.map(toLangChainDecision) },
+            signal: controller.signal,
+          }
+        : {
+            threadId: session.id,
+            input: { messages: [{ role: "user" as const, content: prompt }] },
+            signal: controller.signal,
+          };
 
-      for await (const event of response.stream) {
+      for await (const event of runtime.stream(run)) {
         if (!runControlPublished) {
           runControlPublished = true;
-          options.onRunControl?.({ stop: () => agent.stop(event.runId) });
+          options.onRunControl?.({
+            stop: async () => {
+              if (controller.signal.aborted) return false;
+              controller.abort(new Error("Stopped by user."));
+              return true;
+            },
+          });
         }
+        events.push(event);
         options.onEvent?.(event);
-        if (
-          event.type === AgentEventType.MessagePartDelta &&
-          event.part.type === "text"
-        ) {
-          textChunkCount += 1;
-          textLength += event.part.text.length;
-        }
       }
 
-      const result = await response.result;
+      const result = toRunResult(session, prompt, events, approval?.runId);
       logger.info(
         {
           durationMs: Date.now() - startedAt,
-          chunkCount: textChunkCount,
-          textLength,
-          toolCallCount: result.toolCalls.length,
+          toolCallCount: events.filter(
+            (event) => event.type === AgentEventType.ToolCalled,
+          ).length,
           status: result.status,
         },
         "agent prompt completed",
@@ -187,13 +184,85 @@ export class AgentRunner {
       );
       throw error;
     } finally {
-      this.activeAgents.delete(agent);
+      this.activeRuns.delete(controller);
     }
   }
 
   private assertOpen(): void {
-    if (this.lifecycle !== "open") {
+    if (this.lifecycle !== "open")
       throw new Error("AgentRunner is closed or closing.");
-    }
   }
+}
+
+function toRunResult(
+  session: CliSession,
+  prompt: string,
+  events: readonly AgentEvent[],
+  resumedRunId?: string,
+): CliAgentRunResult {
+  const runId =
+    events.find((event) => event.type === AgentEventType.RunStarted)?.runId ??
+    resumedRunId;
+  if (!runId) throw new Error("Agent stream ended without a run identity.");
+  let status: CliAgentRunResult["status"] = "completed";
+  const approvalRequests: ToolApprovalRequest[] = [];
+  let content = "";
+  for (const event of events) {
+    if (
+      event.type === AgentEventType.MessagePartDelta &&
+      event.part.type === "text"
+    )
+      content += event.part.text;
+    if (event.type === AgentEventType.InterruptRequired) {
+      status = "waiting_for_approval";
+      if (event.interrupt.kind === "tool-approval") {
+        for (const action of event.interrupt.actions) {
+          approvalRequests.push({
+            approvalId: action.id,
+            toolCall: {
+              toolCallId: action.toolCallId ?? action.id,
+              name: action.name,
+              input: isJsonObject(action.input) ? action.input : {},
+            },
+          });
+        }
+      }
+    }
+    if (event.type === AgentEventType.RunFailed) status = "failed";
+    if (event.type === AgentEventType.RunCancelled) status = "cancelled";
+  }
+  const messages = structuredClone(session.messages);
+  if (prompt)
+    messages.push({ role: "user", content: [{ type: "text", text: prompt }] });
+  if (content)
+    messages.push({
+      role: "assistant",
+      content: [{ type: "text", text: content }],
+    });
+  return {
+    runId,
+    status,
+    content: content ? [{ type: "text", text: content }] : [],
+    messages,
+    approvalRequests,
+    stepsCompleted: events.filter(
+      (event) => event.type === AgentEventType.ToolCalled,
+    ).length,
+    ...(status === "failed" ? { error: "Agent execution failed." } : {}),
+  };
+}
+
+function toLangChainDecision(
+  decision: ToolApprovalDecision,
+): { type: "approve" } | { type: "reject"; message: string } {
+  return decision.approved
+    ? { type: "approve" }
+    : {
+        type: "reject",
+        message: decision.reason ?? "Denied in AgentDock CLI.",
+      };
+}
+
+function isJsonObject(value: unknown): value is JsonObject {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }

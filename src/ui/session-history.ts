@@ -1,4 +1,4 @@
-import type { Message, ContentPart } from "@agentdock-ai/agentdock";
+import type { Message, ContentPart } from "@agentdock-ai/contracts";
 import type { ChatMessage } from "./types.js";
 
 export function toChatHistory(messages: readonly Message[]): ChatMessage[] {

@@ -3,21 +3,20 @@ import { mkdtemp, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { test } from "node:test";
-import { SqliteCheckpoint } from "@agentdock-ai/checkpoint-sqlite";
+import { SqliteSaver } from "@langchain/langgraph-checkpoint-sqlite";
 
-test("SqliteCheckpoint initializes LangGraph's schema and is idempotent", async () => {
+test("the CLI uses LangGraph's SQLite saver directly", async () => {
   const directory = await mkdtemp(
     path.join(os.tmpdir(), "agentdock-cli-checkpoint-"),
   );
-  const checkpoint = new SqliteCheckpoint({
-    path: path.join(directory, "checkpoints.sqlite"),
-  });
+  const checkpointer = SqliteSaver.fromConnString(
+    path.join(directory, "checkpoints.sqlite"),
+  );
 
   try {
-    await checkpoint.initialize();
-    await checkpoint.initialize();
+    await checkpointer.setup();
 
-    const tables = checkpoint.saver.db
+    const tables = checkpointer.db
       .prepare(
         "SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY name",
       )
@@ -25,9 +24,8 @@ test("SqliteCheckpoint initializes LangGraph's schema and is idempotent", async 
       .map(({ name }) => name);
 
     assert.deepEqual(tables, ["checkpoints", "writes"]);
-    await checkpoint.close();
-    await checkpoint.close();
   } finally {
+    checkpointer.db.close();
     await rm(directory, { recursive: true, force: true });
   }
 });

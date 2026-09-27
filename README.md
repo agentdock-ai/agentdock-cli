@@ -1,7 +1,7 @@
 <div align="center">
-  <img src="https://raw.githubusercontent.com/Muhammad-Zain01/agentdock/main/logo.png?v=d971329" alt="AgentDock Logo" width="250" style="margin-bottom: 20px;"/>
+  <img src="https://raw.githubusercontent.com/Muhammad-Zain01/agentdock/main/logo.png?v=d971329" alt="Agentdock Logo" width="250" style="margin-bottom: 20px;"/>
 
-**Interactive CLI playground for testing AgentDock workflows.**
+**Interactive CLI playground for testing Agentdock workflows.**
 
 [![version](https://img.shields.io/badge/version-0.1.0-blue.svg?cacheSeconds=2592000)](https://github.com/Muhammad-Zain01/agentdock-cli)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.8.3-blue.svg?logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
@@ -11,12 +11,14 @@
 
 <br />
 
-AgentDock CLI provides a local interactive environment for testing agents, tools, sessions, and workspace operations through the AgentDock harness.
+Agentdock CLI is a local playground for a LangChain `createAgent` backed by a
+LangGraph checkpointer. It consumes AgentDock events while keeping model
+configuration, tools, workspace access, and persistence in the CLI application.
 
 ## ✨ Features
 
 - **Interactive Agent Sessions:** Run prompts continuously in a local REPL.
-- **Session Persistence:** Save, inspect, and resume sessions.
+- **Checkpointed Conversations:** Save and resume threads through LangGraph's SQLite saver.
 - **Workspace Tools:** Read, search, list, write, and update files inside a workspace.
 - **TypeScript First:** Fully typed and built for Node.js applications.
 
@@ -56,7 +58,7 @@ yarn build
 
 ## 🛠️ Usage
 
-Start an interactive AgentDock session using the current working directory as the workspace:
+Start an interactive Agentdock session using the current working directory as the workspace:
 
 ```bash
 yarn start
@@ -68,8 +70,8 @@ Once running, enter prompts continuously. Use `/help` for interactive commands. 
 
 Sessions are stored under `.agentdock/sessions/`, and LangGraph checkpoints are stored in the
 SQLite database `.agentdock/checkpoints.sqlite` in the directory where the CLI is launched.
-Checkpoints allow approval requests to resume through the AgentDock runtime instead of a
-CLI-specific checkpoint store.
+The CLI owns the SQLite saver and closes its database handle when it exits.
+Approval requests resume through LangGraph using the same authorized thread.
 
 Resume a saved session from the command line:
 

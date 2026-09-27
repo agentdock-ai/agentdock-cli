@@ -3,7 +3,7 @@ import {
   type AgentEvent,
   type ToolApprovalDecision,
   type ToolApprovalRequest,
-} from "@agentdock-ai/agentdock";
+} from "@agentdock-ai/contracts";
 import type { AgentRunControlUpdate } from "../../application/contracts/app-types.js";
 import type { ApprovalSubmit, PromptResult, SubmitPrompt } from "../types.js";
 

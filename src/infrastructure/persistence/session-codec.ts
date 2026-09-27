@@ -1,11 +1,10 @@
 import type {
-  AgentRunStatus,
   Message,
   ToolApprovalRequest,
   ToolCallRecord,
   ToolResultRecord,
-} from "@agentdock-ai/agentdock";
-import type { ContentPart } from "@agentdock-ai/agentdock";
+} from "@agentdock-ai/contracts";
+import type { ContentPart } from "@agentdock-ai/contracts";
 import {
   cloneContentParts,
   type JsonObject,
@@ -13,6 +12,7 @@ import {
 } from "@agentdock-ai/contracts";
 import type {
   CliRun,
+  CliRunStatus,
   CliSession,
 } from "../../domain/sessions/session-types.js";
 
@@ -99,7 +99,7 @@ export class SessionCodec {
         sessionId,
       );
       const status = candidate.status;
-      if (!isAgentRunStatus(status)) {
+      if (!isCliRunStatus(status)) {
         throw new Error(`Invalid run status: ${sessionId}`);
       }
       const updatedAt =
@@ -378,7 +378,7 @@ function readContent(
   }
 }
 
-function isAgentRunStatus(value: unknown): value is AgentRunStatus {
+function isCliRunStatus(value: unknown): value is CliRunStatus {
   return typeof value === "string" && runStatuses.has(value);
 }
 
